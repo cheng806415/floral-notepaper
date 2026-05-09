@@ -57,6 +57,139 @@ const saveStateLabel: Record<SaveState, string> = {
   error: "保存失败",
 };
 
+type FormatAction = "bold" | "italic" | "heading" | "hr" | "ul" | "ol" | "code" | "quote";
+
+function applyFormat(
+  textarea: HTMLTextAreaElement,
+  action: FormatAction,
+  setContent: (v: string) => void,
+  markDirty: () => void,
+) {
+  const { selectionStart: start, selectionEnd: end, value } = textarea;
+  const selected = value.slice(start, end);
+  const before = value.slice(0, start);
+  const after = value.slice(end);
+
+  const lineStart = before.lastIndexOf("\n") + 1;
+  const currentLine = before.slice(lineStart);
+
+  let result: string;
+  let cursorStart: number;
+  let cursorEnd: number;
+
+  switch (action) {
+    case "bold": {
+      const wrapped = `**${selected || "粗体文本"}**`;
+      result = before + wrapped + after;
+      cursorStart = start + 2;
+      cursorEnd = cursorStart + (selected || "粗体文本").length;
+      break;
+    }
+    case "italic": {
+      const wrapped = `*${selected || "斜体文本"}*`;
+      result = before + wrapped + after;
+      cursorStart = start + 1;
+      cursorEnd = cursorStart + (selected || "斜体文本").length;
+      break;
+    }
+    case "heading": {
+      const prefix = currentLine.match(/^(#{1,5})\s/);
+      if (prefix) {
+        const newLevel = prefix[1].length < 5 ? "#".repeat(prefix[1].length + 1) : "#";
+        const beforeLine = value.slice(0, lineStart);
+        const afterPrefix = value.slice(lineStart + prefix[0].length);
+        result = beforeLine + newLevel + " " + afterPrefix;
+        const offset = newLevel.length + 1 - prefix[0].length;
+        cursorStart = start + offset;
+        cursorEnd = end + offset;
+      } else if (currentLine.length > 0 && start === end) {
+        result = value.slice(0, lineStart) + "## " + value.slice(lineStart);
+        cursorStart = start + 3;
+        cursorEnd = cursorStart;
+      } else if (selected) {
+        result = before + `## ${selected}` + after;
+        cursorStart = start + 3;
+        cursorEnd = cursorStart + selected.length;
+      } else {
+        result = before + "## 标题" + after;
+        cursorStart = start + 3;
+        cursorEnd = cursorStart + 2;
+      }
+      break;
+    }
+    case "hr": {
+      const newlineBefore = before.endsWith("\n") || before === "" ? "" : "\n";
+      const newlineAfter = after.startsWith("\n") || after === "" ? "" : "\n";
+      result = before + `${newlineBefore}---${newlineAfter}` + after;
+      cursorStart = cursorEnd = before.length + newlineBefore.length + 3;
+      break;
+    }
+    case "ul": {
+      if (selected.includes("\n")) {
+        const lines = selected.split("\n").map((l) => `- ${l}`).join("\n");
+        result = before + lines + after;
+        cursorStart = start;
+        cursorEnd = start + lines.length;
+      } else {
+        const item = `- ${selected || "列表项"}`;
+        result = before + item + after;
+        cursorStart = start + 2;
+        cursorEnd = cursorStart + (selected || "列表项").length;
+      }
+      break;
+    }
+    case "ol": {
+      if (selected.includes("\n")) {
+        const lines = selected.split("\n").map((l, i) => `${i + 1}. ${l}`).join("\n");
+        result = before + lines + after;
+        cursorStart = start;
+        cursorEnd = start + lines.length;
+      } else {
+        const item = `1. ${selected || "列表项"}`;
+        result = before + item + after;
+        cursorStart = start + 3;
+        cursorEnd = cursorStart + (selected || "列表项").length;
+      }
+      break;
+    }
+    case "code": {
+      if (selected.includes("\n")) {
+        const wrapped = "```\n" + selected + "\n```";
+        result = before + wrapped + after;
+        cursorStart = start + 4;
+        cursorEnd = cursorStart + selected.length;
+      } else {
+        const wrapped = `\`${selected || "代码"}\``;
+        result = before + wrapped + after;
+        cursorStart = start + 1;
+        cursorEnd = cursorStart + (selected || "代码").length;
+      }
+      break;
+    }
+    case "quote": {
+      if (selected.includes("\n")) {
+        const lines = selected.split("\n").map((l) => `> ${l}`).join("\n");
+        result = before + lines + after;
+        cursorStart = start;
+        cursorEnd = start + lines.length;
+      } else {
+        const item = `> ${selected || "引用文本"}`;
+        result = before + item + after;
+        cursorStart = start + 2;
+        cursorEnd = cursorStart + (selected || "引用文本").length;
+      }
+      break;
+    }
+  }
+
+  setContent(result);
+  markDirty();
+  requestAnimationFrame(() => {
+    textarea.focus();
+    textarea.setSelectionRange(cursorStart, cursorEnd);
+  });
+}
+
 interface MainWindowProps {
   initialSettingsOpen?: boolean;
   initialConfig?: AppConfig;
@@ -918,19 +1051,25 @@ export function MainWindow({
                       }`}
                     >
                       <div className="flex items-center gap-0.5 px-4 pt-2 pb-1 shrink-0">
-                        {[
-                          { label: "B", title: "粗体", style: "font-bold" },
-                          { label: "I", title: "斜体", style: "italic" },
-                          { label: "H", title: "标题", style: "font-bold" },
-                          { label: "—", title: "分割线", style: "" },
-                          { label: "•", title: "无序列表", style: "" },
-                          { label: "1.", title: "有序列表", style: "font-mono text-[9px]" },
-                          { label: "<>", title: "代码", style: "font-mono text-[9px]" },
-                          { label: "❝", title: "引用", style: "" },
-                        ].map((button) => (
+                        {([
+                          { label: "B", title: "粗体", style: "font-bold", action: "bold" as FormatAction },
+                          { label: "I", title: "斜体", style: "italic", action: "italic" as FormatAction },
+                          { label: "H", title: "标题", style: "font-bold", action: "heading" as FormatAction },
+                          { label: "—", title: "分割线", style: "", action: "hr" as FormatAction },
+                          { label: "•", title: "无序列表", style: "", action: "ul" as FormatAction },
+                          { label: "1.", title: "有序列表", style: "font-mono text-[9px]", action: "ol" as FormatAction },
+                          { label: "<>", title: "代码", style: "font-mono text-[9px]", action: "code" as FormatAction },
+                          { label: "❝", title: "引用", style: "", action: "quote" as FormatAction },
+                        ]).map((button) => (
                           <button
                             key={button.label}
                             title={button.title}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              if (contentRef.current) {
+                                applyFormat(contentRef.current, button.action, setContent, markDirty);
+                              }
+                            }}
                             className={`w-6 h-6 flex items-center justify-center rounded text-[11px] text-ink-ghost hover:text-ink-faint hover:bg-paper-warm transition-all cursor-pointer ${button.style}`}
                           >
                             {button.label}
