@@ -15,7 +15,11 @@ export function buildPreview(content: string): string {
 }
 
 export function countNoteChars(content: string): number {
-  return Array.from(content).filter((char) => !/\s/.test(char)).length;
+  let count = 0;
+  for (const ch of content) {
+    if (!/\s/.test(ch)) count++;
+  }
+  return count;
 }
 
 export function metadataFromNote(note: Note): NoteMetadata {

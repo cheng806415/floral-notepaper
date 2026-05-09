@@ -59,6 +59,17 @@ const saveStateLabel: Record<SaveState, string> = {
 
 type FormatAction = "bold" | "italic" | "heading" | "hr" | "ul" | "ol" | "code" | "quote";
 
+const toolbarButtons: { label: string; title: string; style: string; action: FormatAction }[] = [
+  { label: "B", title: "粗体", style: "font-bold", action: "bold" },
+  { label: "I", title: "斜体", style: "italic", action: "italic" },
+  { label: "H", title: "标题", style: "font-bold", action: "heading" },
+  { label: "—", title: "分割线", style: "", action: "hr" },
+  { label: "•", title: "无序列表", style: "", action: "ul" },
+  { label: "1.", title: "有序列表", style: "font-mono text-[9px]", action: "ol" },
+  { label: "<>", title: "代码", style: "font-mono text-[9px]", action: "code" },
+  { label: "❝", title: "引用", style: "", action: "quote" },
+];
+
 function applyFormat(
   textarea: HTMLTextAreaElement,
   action: FormatAction,
@@ -241,6 +252,13 @@ export function MainWindow({
     [notes, searchQuery],
   );
 
+  const lineCount = useMemo(() => content.split("\n").length, [content]);
+  const byteSize = useMemo(
+    () => (new TextEncoder().encode(content).length / 1024).toFixed(1),
+    [content],
+  );
+  const charCount = useMemo(() => countNoteChars(content), [content]);
+
   const applyNote = useCallback((note: Note) => {
     setSelectedId(note.id);
     setTitle(note.title);
@@ -303,10 +321,7 @@ export function MainWindow({
           const note = await getNote(loadedNotes[0].id);
           if (!cancelled) applyNote(note);
         } else {
-          setSelectedId(null);
-          setTitle("");
-          setContent("");
-          setSaveState("idle");
+          clearCurrentNote();
         }
       } catch (error) {
         if (!cancelled) setErrorMessage(getErrorMessage(error));
@@ -319,7 +334,7 @@ export function MainWindow({
     return () => {
       cancelled = true;
     };
-  }, [applyNote]);
+  }, [applyNote, clearCurrentNote]);
 
   useEffect(() => {
     function closeNoteMenu() {
@@ -518,10 +533,7 @@ export function MainWindow({
       if (noteId === selectedId && remaining[0]) {
         await loadNote(remaining[0].id);
       } else if (noteId === selectedId) {
-        setSelectedId(null);
-        setTitle("");
-        setContent("");
-        setSaveState("idle");
+        clearCurrentNote();
       }
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
@@ -617,11 +629,15 @@ export function MainWindow({
     void startCurrentWindowDrag().catch(() => undefined);
   };
 
-  const handleTitleBarDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest("button")) return;
+  const toggleMaximize = () => {
     void toggleMaximizeCurrentWindow().then(() =>
       isCurrentWindowMaximized().then(setIsMaximized),
     );
+  };
+
+  const handleTitleBarDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest("button")) return;
+    toggleMaximize();
   };
 
   const handleMinimize = () => {
@@ -629,9 +645,7 @@ export function MainWindow({
   };
 
   const handleMaximize = () => {
-    void toggleMaximizeCurrentWindow().then(() =>
-      isCurrentWindowMaximized().then(setIsMaximized),
-    );
+    toggleMaximize();
   };
 
   const handleClose = () => {
@@ -1018,7 +1032,7 @@ export function MainWindow({
                 </span>
                 <span className="text-[10px] text-ink-ghost/40">·</span>
                 <span className="text-[10px] text-ink-ghost font-mono tabular-nums">
-                  {countNoteChars(content)} 字
+                  {charCount} 字
                 </span>
                 <span className="text-[10px] text-ink-ghost/40">·</span>
                 <span
@@ -1051,16 +1065,7 @@ export function MainWindow({
                       }`}
                     >
                       <div className="flex items-center gap-0.5 px-4 pt-2 pb-1 shrink-0">
-                        {([
-                          { label: "B", title: "粗体", style: "font-bold", action: "bold" as FormatAction },
-                          { label: "I", title: "斜体", style: "italic", action: "italic" as FormatAction },
-                          { label: "H", title: "标题", style: "font-bold", action: "heading" as FormatAction },
-                          { label: "—", title: "分割线", style: "", action: "hr" as FormatAction },
-                          { label: "•", title: "无序列表", style: "", action: "ul" as FormatAction },
-                          { label: "1.", title: "有序列表", style: "font-mono text-[9px]", action: "ol" as FormatAction },
-                          { label: "<>", title: "代码", style: "font-mono text-[9px]", action: "code" as FormatAction },
-                          { label: "❝", title: "引用", style: "", action: "quote" as FormatAction },
-                        ]).map((button) => (
+                        {toolbarButtons.map((button) => (
                           <button
                             key={button.label}
                             title={button.title}
@@ -1123,7 +1128,7 @@ export function MainWindow({
             <div className="flex items-center justify-between px-4 h-7 border-t border-paper-deep/20 bg-paper/30 shrink-0">
               <div className="flex items-center gap-3">
                 <span className="text-[10px] text-ink-ghost font-mono tabular-nums">
-                  Ln {content.split("\n").length}
+                  Ln {lineCount}
                 </span>
                 <span className="text-[10px] text-ink-ghost/40">|</span>
                 <span className="text-[10px] text-ink-ghost font-mono">
@@ -1136,7 +1141,7 @@ export function MainWindow({
                 </span>
                 <span className="text-[10px] text-ink-ghost/40">|</span>
                 <span className="text-[10px] text-ink-ghost font-mono tabular-nums">
-                  {(new TextEncoder().encode(content).length / 1024).toFixed(1)} KB
+                  {byteSize} KB
                 </span>
               </div>
             </div>

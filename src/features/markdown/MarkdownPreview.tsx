@@ -7,6 +7,8 @@ interface MarkdownPreviewProps {
   content: string;
 }
 
+const remarkPlugins = [remarkGfm];
+
 const components: Components = {
   h1: ({ children }) => (
     <h1 className="text-[22px] font-display font-bold text-ink mt-6 mb-4 tracking-wide">
@@ -119,7 +121,7 @@ export function MarkdownPreview({ content }: MarkdownPreviewProps) {
   return (
     <div className="max-w-[560px] text-[14px] font-body">
       {content.trim() ? (
-        <Markdown remarkPlugins={[remarkGfm]} components={components}>
+        <Markdown remarkPlugins={remarkPlugins} components={components}>
           {content}
         </Markdown>
       ) : (
