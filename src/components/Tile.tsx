@@ -1,3 +1,4 @@
+import chroma from "chroma-js";
 import type { CSSProperties, HTMLAttributes } from "react";
 import {
   DEFAULT_TILE_COLOR,
@@ -74,8 +75,8 @@ export function Tile({
   ...divProps
 }: TileProps) {
   const tileColor = normalizeTileColor(color);
-  const borderColor = colorWithAlpha(blendHex(tileColor, "#1a1a18", 0.18), 0.3);
-  const cornerColor = colorWithAlpha(blendHex(tileColor, "#1a1a18", 0.3), 0.26);
+  const borderColor = chroma.mix(tileColor, "#1a1a18", 0.18).alpha(0.3).css();
+  const cornerColor = chroma.mix(tileColor, "#1a1a18", 0.3).alpha(0.26).css();
   const mergedStyle: CSSProperties = {
     width,
     backgroundColor: tileColor,
@@ -114,27 +115,3 @@ export function Tile({
   );
 }
 
-function hexToRgb(hexColor: string): [number, number, number] {
-  const normalized = normalizeTileColor(hexColor).slice(1);
-  return [
-    Number.parseInt(normalized.slice(0, 2), 16),
-    Number.parseInt(normalized.slice(2, 4), 16),
-    Number.parseInt(normalized.slice(4, 6), 16),
-  ];
-}
-
-function blendHex(source: string, target: string, amount: number): string {
-  const [sourceR, sourceG, sourceB] = hexToRgb(source);
-  const [targetR, targetG, targetB] = hexToRgb(target);
-  const blend = (from: number, to: number) =>
-    Math.round(from + (to - from) * amount)
-      .toString(16)
-      .padStart(2, "0");
-
-  return `#${blend(sourceR, targetR)}${blend(sourceG, targetG)}${blend(sourceB, targetB)}`;
-}
-
-function colorWithAlpha(hexColor: string, alpha: number): string {
-  const [red, green, blue] = hexToRgb(hexColor);
-  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-}
