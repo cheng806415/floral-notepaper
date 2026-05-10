@@ -8,11 +8,9 @@ import { applyTheme, watchSystemTheme } from "../features/settings/theme";
 
 interface SettingsPanelProps {
   config: AppConfig;
-  isSaving: boolean;
   onChange: (config: AppConfig) => void;
   onChooseNotesDir: () => void;
   onClose: () => void;
-  onSave: () => void;
 }
 
 const themeOptions: Array<{ value: ThemeOption; label: string }> = [
@@ -29,11 +27,9 @@ const viewModes: Array<{ value: ViewMode; label: string }> = [
 
 export function SettingsPanel({
   config,
-  isSaving,
   onChange,
   onChooseNotesDir,
   onClose,
-  onSave,
 }: SettingsPanelProps) {
   const setConfigValue = <Key extends keyof AppConfig>(
     key: Key,
@@ -219,11 +215,10 @@ export function SettingsPanel({
       <div className="px-4 py-3 border-t border-paper-deep/25 bg-paper/25">
         <button
           type="button"
-          onClick={onSave}
-          disabled={isSaving}
-          className="w-full h-8 rounded-lg bg-bamboo text-cloud text-[12px] font-body hover:bg-bamboo-light transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={onClose}
+          className="w-full h-8 rounded-lg bg-bamboo text-cloud text-[12px] font-body hover:bg-bamboo-light transition-colors cursor-pointer"
         >
-          {isSaving ? "保存中" : "保存设置"}
+          完成
         </button>
       </div>
     </aside>

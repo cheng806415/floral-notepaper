@@ -19,11 +19,9 @@ describe("SettingsPanel", () => {
     const markup = renderToStaticMarkup(
       <SettingsPanel
         config={config}
-        isSaving={false}
         onChange={vi.fn()}
         onChooseNotesDir={vi.fn()}
         onClose={vi.fn()}
-        onSave={vi.fn()}
       />,
     );
 
@@ -43,6 +41,6 @@ describe("SettingsPanel", () => {
     expect(markup).toContain("编辑");
     expect(markup).toContain("分栏");
     expect(markup).toContain("预览");
-    expect(markup).toContain("保存设置");
+    expect(markup).toContain("完成");
   });
 });

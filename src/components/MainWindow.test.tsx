@@ -23,6 +23,6 @@ describe("MainWindow settings", () => {
 
     expect(markup).toContain("应用设置");
     expect(markup).toContain("D:\\Notes\\花笺");
-    expect(markup).toContain("保存设置");
+    expect(markup).toContain("完成");
   });
 });

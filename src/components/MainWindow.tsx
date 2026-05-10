@@ -232,8 +232,6 @@ export function MainWindow({
   const [savedNotesDir, setSavedNotesDir] = useState<string | null>(
     initialConfig?.notesDir ?? null,
   );
-  const [settingsSaving, setSettingsSaving] = useState(false);
-  const [settingsToast, setSettingsToast] = useState<string | null>(null);
   const [noteTransitionKey, setNoteTransitionKey] = useState(0);
   const contentRef = useRef<HTMLTextAreaElement>(null);
 
@@ -445,49 +443,53 @@ export function MainWindow({
     }
   };
 
-  const handleSaveSettings = async () => {
-    if (!settingsConfig) return;
+  const settingsSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    if (selectedId && saveState === "dirty") {
-      const saved = await saveCurrentNote();
-      if (!saved) return;
-    }
-
-    const previousNotesDir = savedNotesDir ?? settingsConfig.notesDir;
-    const normalizedConfig = {
-      ...settingsConfig,
-      defaultViewMode: normalizeViewMode(settingsConfig.defaultViewMode),
-      tileColor: normalizeTileColor(settingsConfig.tileColor),
-    };
-
-    setSettingsSaving(true);
-    setErrorMessage(null);
-    try {
-      const savedConfig = await saveConfig(normalizedConfig);
-      setSettingsConfig(savedConfig);
-      setSavedNotesDir(savedConfig.notesDir);
-      setViewMode(normalizeViewMode(savedConfig.defaultViewMode));
-
-      if (savedConfig.notesDir !== previousNotesDir) {
-        const loadedNotes = await refreshNotes();
-        if (loadedNotes[0]) {
-          await loadNote(loadedNotes[0].id);
-        } else {
-          clearCurrentNote();
-        }
+  const persistSettings = useCallback(
+    (nextConfig: AppConfig) => {
+      if (settingsSaveTimer.current) {
+        clearTimeout(settingsSaveTimer.current);
       }
+      settingsSaveTimer.current = setTimeout(async () => {
+        const previousNotesDir = savedNotesDir ?? nextConfig.notesDir;
+        const normalizedConfig = {
+          ...nextConfig,
+          defaultViewMode: normalizeViewMode(nextConfig.defaultViewMode),
+          tileColor: normalizeTileColor(nextConfig.tileColor),
+        };
+        try {
+          const savedConfig = await saveConfig(normalizedConfig);
+          setSettingsConfig(savedConfig);
+          setSavedNotesDir(savedConfig.notesDir);
+          setViewMode(normalizeViewMode(savedConfig.defaultViewMode));
 
-      setSettingsToast("设置已保存");
-      window.setTimeout(() => {
-        setSettingsToast(null);
-        setSettingsOpen(false);
-      }, 1200);
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error));
-    } finally {
-      setSettingsSaving(false);
-    }
-  };
+          if (savedConfig.notesDir !== previousNotesDir) {
+            const loadedNotes = await refreshNotes();
+            if (loadedNotes[0]) {
+              await loadNote(loadedNotes[0].id);
+            } else {
+              clearCurrentNote();
+            }
+          }
+        } catch (error) {
+          setErrorMessage(getErrorMessage(error));
+        }
+      }, 300);
+    },
+    [savedNotesDir, refreshNotes, loadNote, clearCurrentNote],
+  );
+
+  const handleSettingsChange = useCallback(
+    (nextConfig: AppConfig) => {
+      setSettingsConfig(nextConfig);
+      persistSettings(nextConfig);
+    },
+    [persistSettings],
+  );
+
+  const handleCloseSettings = useCallback(() => {
+    setSettingsOpen(false);
+  }, []);
 
   const handleImportNote = async () => {
     setErrorMessage(null);
@@ -1153,20 +1155,11 @@ export function MainWindow({
               <div className="w-[360px]">
                 <SettingsPanel
                   config={settingsConfig}
-                  isSaving={settingsSaving}
-                  onChange={setSettingsConfig}
+                  onChange={handleSettingsChange}
                   onChooseNotesDir={() => void handleChooseNotesDir()}
-                  onClose={() => setSettingsOpen(false)}
-                  onSave={() => void handleSaveSettings()}
+                  onClose={handleCloseSettings}
                 />
               </div>
-              {settingsToast && (
-                <div className="absolute inset-0 flex items-center justify-center bg-cloud/60 backdrop-blur-[2px] z-10 animate-fade-in">
-                  <div className="px-5 py-2.5 rounded-xl bg-bamboo text-cloud text-[13px] font-body shadow-lg">
-                    {settingsToast}
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>
