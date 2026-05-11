@@ -11,6 +11,7 @@ const config = {
   noteAutoSave: true,
   noteSurfaceAutoSave: true,
   tileColor: "#f6f3ec",
+  tileColorMode: "custom" as const,
   theme: "light" as const,
 };
 
@@ -35,6 +36,8 @@ describe("SettingsPanel", () => {
     expect(markup).toContain("自动保存笔记");
     expect(markup).toContain("小窗笔记自动保存");
     expect(markup).toContain("磁贴颜色");
+    expect(markup).toContain("跟随主题");
+    expect(markup).toContain("自定义");
     expect(markup).toContain('type="color"');
     expect(markup).toContain('value="#f6f3ec"');
     expect(markup).toContain("默认视图");

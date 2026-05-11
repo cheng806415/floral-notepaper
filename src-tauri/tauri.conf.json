@@ -29,6 +29,7 @@
   "bundle": {
     "active": true,
     "targets": "nsis",
+    "fileName": "floral-notepaper",
     "windows": {
       "nsis": {
         "installMode": "both",

@@ -1,10 +1,15 @@
-import type { AppConfig, ThemeOption, ViewMode } from "../features/settings/types";
+import type { AppConfig, ThemeOption, TileColorMode, ViewMode } from "../features/settings/types";
 import { supportedShortcuts } from "../features/settings/api";
 import {
   DEFAULT_TILE_COLOR,
   normalizeTileColor,
 } from "../features/settings/tileColor";
 import { applyTheme, watchSystemTheme } from "../features/settings/theme";
+
+const tileColorModes: Array<{ value: TileColorMode; label: string }> = [
+  { value: "system", label: "跟随主题" },
+  { value: "custom", label: "自定义" },
+];
 
 interface SettingsPanelProps {
   config: AppConfig;
@@ -160,33 +165,51 @@ export function SettingsPanel({
           <label className="block text-[11px] font-body text-ink-faint">
             磁贴颜色
           </label>
-          <div className="flex items-center gap-2">
-            <input
-              type="color"
-              value={normalizeTileColor(config.tileColor)}
-              onChange={(event) =>
-                setConfigValue("tileColor", event.target.value)
-              }
-              className="w-10 h-8 rounded-lg border border-paper-deep/40 bg-paper-warm/70 cursor-pointer"
-            />
-            <input
-              type="text"
-              value={config.tileColor}
-              onChange={(event) =>
-                setConfigValue("tileColor", event.target.value)
-              }
-              placeholder="#f6f3ec"
-              spellCheck={false}
-              className="min-w-0 flex-1 h-8 px-2.5 rounded-lg bg-paper-warm/70 border border-paper-deep/40 text-[12px] font-mono text-ink-soft outline-none"
-            />
-            <button
-              type="button"
-              onClick={() => setConfigValue("tileColor", DEFAULT_TILE_COLOR)}
-              className="h-8 px-2.5 rounded-lg border border-paper-deep/45 text-[11px] text-ink-faint hover:text-bamboo hover:bg-bamboo-mist/50 transition-colors cursor-pointer whitespace-nowrap"
-            >
-              默认
-            </button>
+          <div className="grid grid-cols-2 gap-1 bg-paper-warm/60 rounded-lg p-[2px] border border-paper-deep/30">
+            {tileColorModes.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setConfigValue("tileColorMode", option.value)}
+                className={`h-7 rounded-md text-[11px] transition-all cursor-pointer ${
+                  config.tileColorMode === option.value
+                    ? "bg-cloud text-bamboo font-medium shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                    : "text-ink-ghost hover:text-ink-faint"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
+          {config.tileColorMode === "custom" && (
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={normalizeTileColor(config.tileColor)}
+                onChange={(event) =>
+                  setConfigValue("tileColor", event.target.value)
+                }
+                className="w-10 h-8 rounded-lg border border-paper-deep/40 bg-paper-warm/70 cursor-pointer"
+              />
+              <input
+                type="text"
+                value={config.tileColor}
+                onChange={(event) =>
+                  setConfigValue("tileColor", event.target.value)
+                }
+                placeholder="#f6f3ec"
+                spellCheck={false}
+                className="min-w-0 flex-1 h-8 px-2.5 rounded-lg bg-paper-warm/70 border border-paper-deep/40 text-[12px] font-mono text-ink-soft outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setConfigValue("tileColor", DEFAULT_TILE_COLOR)}
+                className="h-8 px-2.5 rounded-lg border border-paper-deep/45 text-[11px] text-ink-faint hover:text-bamboo hover:bg-bamboo-mist/50 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                默认
+              </button>
+            </div>
+          )}
         </section>
 
         <section className="space-y-2">

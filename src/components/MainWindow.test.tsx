@@ -16,6 +16,7 @@ describe("MainWindow settings", () => {
           noteAutoSave: true,
           noteSurfaceAutoSave: true,
           tileColor: "#f6f3ec",
+          tileColorMode: "system",
           theme: "light",
         }}
       />,

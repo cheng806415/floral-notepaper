@@ -30,7 +30,9 @@ import { getConfig } from "../features/settings/api";
 import {
   DEFAULT_TILE_COLOR,
   normalizeTileColor,
+  resolveTileColor,
 } from "../features/settings/tileColor";
+import type { TileColorMode } from "../features/settings/types";
 import { shouldSaveBeforeSwitchingToTile } from "../features/windows/noteSurfaceSavePolicy";
 import {
   NOTE_SURFACE_ACTION_EVENT,
@@ -120,8 +122,12 @@ export function NotePad({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noteSurfaceAutoSave, setNoteSurfaceAutoSave] =
     useState(initialAutoSave);
-  const [tileColor, setTileColor] = useState(
+  const [tileColorRaw, setTileColorRaw] = useState(
     normalizeTileColor(initialTileColor),
+  );
+  const [tileColorMode, setTileColorMode] = useState<TileColorMode>("system");
+  const [tileColor, setTileColor] = useState(() =>
+    resolveTileColor("system", normalizeTileColor(initialTileColor)),
   );
   const [isExiting, setIsExiting] = useState(false);
   const contentRef = useRef<HTMLTextAreaElement>(null);
@@ -153,7 +159,14 @@ export function NotePad({
         const [loadedConfig] = await Promise.all([getConfig(), refreshNotes()]);
         if (!cancelled) {
           setNoteSurfaceAutoSave(loadedConfig.noteSurfaceAutoSave);
-          setTileColor(normalizeTileColor(loadedConfig.tileColor));
+          setTileColorRaw(normalizeTileColor(loadedConfig.tileColor));
+          setTileColorMode(loadedConfig.tileColorMode ?? "system");
+          setTileColor(
+            resolveTileColor(
+              loadedConfig.tileColorMode ?? "system",
+              loadedConfig.tileColor,
+            ),
+          );
         }
         if (initialNoteId) {
           const note = await getNote(initialNoteId);
@@ -189,15 +202,32 @@ export function NotePad({
   }, []);
 
   useEffect(() => {
-    const unlisten = listen<{ tileColor?: string }>("config-changed", (event) => {
-      if (event.payload.tileColor) {
-        setTileColor(normalizeTileColor(event.payload.tileColor));
-      }
+    const unlisten = listen<{
+      tileColor?: string;
+      tileColorMode?: TileColorMode;
+    }>("config-changed", (event) => {
+      const mode = event.payload.tileColorMode ?? tileColorMode;
+      const raw = event.payload.tileColor ?? tileColorRaw;
+      setTileColorMode(mode);
+      setTileColorRaw(normalizeTileColor(raw));
+      setTileColor(resolveTileColor(mode, raw));
     });
     return () => {
       void unlisten.then((fn) => fn());
     };
-  }, []);
+  }, [tileColorMode, tileColorRaw]);
+
+  useEffect(() => {
+    if (tileColorMode !== "system") return;
+    const observer = new MutationObserver(() => {
+      setTileColor(resolveTileColor("system", tileColorRaw));
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+    return () => observer.disconnect();
+  }, [tileColorMode, tileColorRaw]);
 
   useEffect(() => {
     let myLabel = "";

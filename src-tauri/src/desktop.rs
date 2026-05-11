@@ -1062,6 +1062,7 @@ mod tests {
             note_auto_save: true,
             note_surface_auto_save: true,
             tile_color: "#f6f3ec".into(),
+            tile_color_mode: "system".into(),
             theme: "light".into(),
         };
         let next = AppConfig {
@@ -1073,6 +1074,7 @@ mod tests {
             note_auto_save: false,
             note_surface_auto_save: false,
             tile_color: "#efe8dc".into(),
+            tile_color_mode: "custom".into(),
             theme: "dark".into(),
         };
 

@@ -20,6 +20,8 @@ pub struct AppConfig {
     pub note_surface_auto_save: bool,
     #[serde(default = "default_tile_color")]
     pub tile_color: String,
+    #[serde(default = "default_tile_color_mode")]
+    pub tile_color_mode: String,
     #[serde(default = "default_theme")]
     pub theme: String,
 }
@@ -310,6 +312,7 @@ impl NoteStore {
             note_auto_save: true,
             note_surface_auto_save: true,
             tile_color: default_tile_color(),
+            tile_color_mode: default_tile_color_mode(),
             theme: default_theme(),
         }
     }
@@ -543,6 +546,10 @@ fn default_tile_color() -> String {
     "#f6f3ec".into()
 }
 
+fn default_tile_color_mode() -> String {
+    "system".into()
+}
+
 fn default_theme() -> String {
     "system".into()
 }
@@ -652,6 +659,7 @@ mod tests {
         assert!(default_config.note_auto_save);
         assert!(default_config.note_surface_auto_save);
         assert_eq!(default_config.tile_color, "#f6f3ec");
+        assert_eq!(default_config.tile_color_mode, "system");
         assert_eq!(default_config.theme, "system");
         assert!(default_config.notes_dir.ends_with(r"\notes"));
 
@@ -665,6 +673,7 @@ mod tests {
             note_auto_save: false,
             note_surface_auto_save: false,
             tile_color: "#efe8dc".into(),
+            tile_color_mode: "custom".into(),
             theme: "dark".into(),
         };
 
@@ -700,6 +709,7 @@ mod tests {
         assert!(loaded.note_auto_save);
         assert!(loaded.note_surface_auto_save);
         assert_eq!(loaded.tile_color, "#f6f3ec");
+        assert_eq!(loaded.tile_color_mode, "system");
         assert_eq!(loaded.theme, "system");
     }
 

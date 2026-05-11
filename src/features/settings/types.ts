@@ -2,6 +2,8 @@ export type ViewMode = "edit" | "split" | "preview";
 
 export type ThemeOption = "light" | "dark" | "system";
 
+export type TileColorMode = "system" | "custom";
+
 export interface AppConfig {
   notesDir: string;
   globalShortcut: string;
@@ -11,5 +13,6 @@ export interface AppConfig {
   noteAutoSave: boolean;
   noteSurfaceAutoSave: boolean;
   tileColor: string;
+  tileColorMode: TileColorMode;
   theme: ThemeOption;
 }

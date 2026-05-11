@@ -37,6 +37,7 @@ describe("settings api", () => {
       noteAutoSave: true,
       noteSurfaceAutoSave: true,
       tileColor: "#f6f3ec",
+      tileColorMode: "system",
       theme: "light",
     };
     mockedInvoke.mockResolvedValue(config);
@@ -56,6 +57,7 @@ describe("settings api", () => {
       noteAutoSave: false,
       noteSurfaceAutoSave: false,
       tileColor: "#efe8dc",
+      tileColorMode: "custom",
       theme: "dark",
     };
     mockedInvoke.mockResolvedValue(config);
