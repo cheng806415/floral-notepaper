@@ -9,7 +9,7 @@
 ## 功能
 
 - **Markdown 编辑与预览** — 支持GitHub Flavored Markdown语法，支持实时切换编辑和预览模式
-- 
+
 - **快捷便签** — 通过托盘或全局快捷键（默认 Ctrl+Space）随时唤出便签窗口
 
 ![小窗多开示例](Docs/images/小窗多开示例.gif)
