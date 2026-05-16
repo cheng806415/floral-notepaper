@@ -541,15 +541,17 @@ fn open_tile_window_now(
     let label = tile_window_label(note_id);
     let url = format!("index.html?view=tile&noteId={note_id}");
 
+    let specs = notepad_window_specs();
+
     open_or_focus_window(
         app,
         &label,
         url,
         "花笺磁贴",
-        420.0,
-        430.0,
-        260.0,
-        220.0,
+        specs.width,
+        specs.height,
+        specs.min_width,
+        specs.min_height,
         false,
         true,
         false,
