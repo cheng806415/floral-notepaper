@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, test } from "vitest";
-import { MainWindow } from "./MainWindow";
+import { describe, expect, test, vi } from "vitest";
+import { MainWindow, runEditorUndo } from "./MainWindow";
 
 describe("MainWindow settings", () => {
   test("can render the settings panel with the loaded config", () => {
@@ -26,5 +26,28 @@ describe("MainWindow settings", () => {
 
     expect(markup).toContain("应用设置");
     expect(markup).toContain("D:\\Notes\\花笺");
+  });
+});
+
+describe("MainWindow editor undo", () => {
+  test("renders undo as an icon before save in the editor action bar", () => {
+    const markup = renderToStaticMarkup(<MainWindow />);
+
+    expect(markup).toContain('aria-label="撤销"');
+    expect(markup).toContain('data-testid="main-editor-undo-icon"');
+    expect(markup).not.toContain(">撤销<");
+    expect(markup.indexOf('aria-label="撤销"')).toBeLessThan(markup.indexOf(">保存<"));
+  });
+
+  test("focuses the editor and runs the browser undo command", () => {
+    const focus = vi.fn();
+    const execCommand = vi.fn(() => true);
+    const textarea = { disabled: false, focus } as unknown as HTMLTextAreaElement;
+
+    const undone = runEditorUndo(textarea, { execCommand });
+
+    expect(undone).toBe(true);
+    expect(focus).toHaveBeenCalledOnce();
+    expect(execCommand).toHaveBeenCalledWith("undo");
   });
 });

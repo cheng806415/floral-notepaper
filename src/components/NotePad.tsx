@@ -186,6 +186,15 @@ export function NotePad({
   }, [applyNote, initialNoteId, refreshNotes]);
 
   useEffect(() => {
+    const unlisten = listen("notes-changed", () => {
+      void refreshNotes().catch(() => undefined);
+    });
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  }, [refreshNotes]);
+
+  useEffect(() => {
     if (isStandby.current) return;
     let cancelled = false;
     requestAnimationFrame(() => {
@@ -337,6 +346,18 @@ export function NotePad({
       setErrorMessage(getErrorMessage(error));
     }
   }, [saveNote]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key === "s") {
+        event.preventDefault();
+        void handleSave();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [handleSave]);
 
   const handleOpenNote = async (noteId: string) => {
     setErrorMessage(null);

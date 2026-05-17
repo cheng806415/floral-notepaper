@@ -21,23 +21,31 @@ fn notes_get(id: String) -> Result<Note, AppError> {
 }
 
 #[tauri::command]
-fn notes_create(request: SaveNoteRequest) -> Result<Note, AppError> {
-    default_store()?.create_note(request)
+fn notes_create(app: AppHandle, request: SaveNoteRequest) -> Result<Note, AppError> {
+    let note = default_store()?.create_note(request)?;
+    let _ = app.emit("notes-changed", ());
+    Ok(note)
 }
 
 #[tauri::command]
-fn notes_update(id: String, request: SaveNoteRequest) -> Result<Note, AppError> {
-    default_store()?.update_note(&id, request)
+fn notes_update(app: AppHandle, id: String, request: SaveNoteRequest) -> Result<Note, AppError> {
+    let note = default_store()?.update_note(&id, request)?;
+    let _ = app.emit("notes-changed", ());
+    Ok(note)
 }
 
 #[tauri::command]
-fn notes_delete(id: String) -> Result<(), AppError> {
-    default_store()?.delete_note(&id)
+fn notes_delete(app: AppHandle, id: String) -> Result<(), AppError> {
+    default_store()?.delete_note(&id)?;
+    let _ = app.emit("notes-changed", ());
+    Ok(())
 }
 
 #[tauri::command]
-fn notes_import_markdown(path: String) -> Result<Note, AppError> {
-    default_store()?.import_markdown_file(&PathBuf::from(path))
+fn notes_import_markdown(app: AppHandle, path: String) -> Result<Note, AppError> {
+    let note = default_store()?.import_markdown_file(&PathBuf::from(path))?;
+    let _ = app.emit("notes-changed", ());
+    Ok(note)
 }
 
 #[tauri::command]
