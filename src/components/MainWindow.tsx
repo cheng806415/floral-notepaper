@@ -1211,10 +1211,13 @@ export function MainWindow({
                       const isSelected = note.id === selectedId;
                       const isHovered = note.id === hoveredId;
                       return (
-                        <button
+                        <div
                           key={note.id}
                           draggable
-                          onDragStart={(e) => e.dataTransfer.setData("text/note-id", note.id)}
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData("text/plain", note.id);
+                            e.dataTransfer.effectAllowed = "move";
+                          }}
                           onClick={() => void handleSelectNote(note.id)}
                           onContextMenu={(event) => handleOpenNoteMenu(event, note.id)}
                           onMouseEnter={() => setHoveredId(note.id)}
@@ -1252,7 +1255,7 @@ export function MainWindow({
                               {note.wordCount} 字
                             </span>
                           </div>
-                        </button>
+                        </div>
                       );
                     });
                   }
@@ -1284,7 +1287,7 @@ export function MainWindow({
                         onDrop={(e) => {
                           e.preventDefault();
                           setDragOverCategory(null);
-                          const noteId = e.dataTransfer.getData("text/note-id");
+                          const noteId = e.dataTransfer.getData("text/plain");
                           if (noteId) void handleMoveNote(noteId, group.category);
                         }}
                       >
@@ -1356,7 +1359,25 @@ export function MainWindow({
                       </div>
 
                       {!isCollapsed && (
-                        <div className="bg-bamboo/[0.03] border border-t-0 border-bamboo/10 rounded-b-lg pb-1 pt-1">
+                        <div
+                          className="bg-bamboo/[0.03] border border-t-0 border-bamboo/10 rounded-b-lg pb-1 pt-1"
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = "move";
+                            setDragOverCategory(group.category);
+                          }}
+                          onDragLeave={(e) => {
+                            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                              setDragOverCategory(null);
+                            }
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setDragOverCategory(null);
+                            const noteId = e.dataTransfer.getData("text/plain");
+                            if (noteId) void handleMoveNote(noteId, group.category);
+                          }}
+                        >
                           {group.notes.length === 0 ? (
                             <div className="px-3 py-3 text-center text-[11px] text-ink-ghost/50">
                               空文件夹
@@ -1366,10 +1387,13 @@ export function MainWindow({
                             const isHovered = note.id === hoveredId;
 
                             return (
-                              <button
+                              <div
                                 key={note.id}
                                 draggable
-                                onDragStart={(e) => e.dataTransfer.setData("text/note-id", note.id)}
+                                onDragStart={(e) => {
+                                  e.dataTransfer.setData("text/plain", note.id);
+                                  e.dataTransfer.effectAllowed = "move";
+                                }}
                                 onClick={() => void handleSelectNote(note.id)}
                                 onContextMenu={(event) => handleOpenNoteMenu(event, note.id)}
                                 onMouseEnter={() => setHoveredId(note.id)}
@@ -1413,7 +1437,7 @@ export function MainWindow({
                                     {note.wordCount} 字
                                   </span>
                                 </div>
-                              </button>
+                              </div>
                             );
                           })}
                         </div>
