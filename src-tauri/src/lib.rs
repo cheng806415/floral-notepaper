@@ -46,6 +46,28 @@ fn notes_export_markdown(id: String, path: String) -> Result<(), AppError> {
 }
 
 #[tauri::command]
+fn read_external_file(path: String) -> Result<String, AppError> {
+    std::fs::read_to_string(&path).map_err(|e| AppError {
+        code: "io".into(),
+        message: e.to_string(),
+    })
+}
+
+#[tauri::command]
+fn save_external_file(path: String, content: String) -> Result<(), AppError> {
+    if let Some(parent) = PathBuf::from(&path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| AppError {
+            code: "io".into(),
+            message: e.to_string(),
+        })?;
+    }
+    std::fs::write(&path, content).map_err(|e| AppError {
+        code: "io".into(),
+        message: e.to_string(),
+    })
+}
+
+#[tauri::command]
 fn config_get() -> Result<AppConfig, AppError> {
     default_store()?.load_config()
 }
@@ -91,6 +113,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if let Some(file_path) = desktop::extract_file_arg(&args) {
+                let _ = app.emit("open-external-file", file_path);
+            }
+            let _ = desktop::show_main_window(app);
+        }))
         .setup(|app| {
             desktop::setup_desktop(app)?;
             Ok(())
@@ -105,6 +133,8 @@ pub fn run() {
             notes_delete,
             notes_import_markdown,
             notes_export_markdown,
+            read_external_file,
+            save_external_file,
             config_get,
             config_save,
             open_notepad_window,
