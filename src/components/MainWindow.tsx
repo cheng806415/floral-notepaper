@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
-import { emit } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { exportMarkdownNote, importMarkdownNote } from "../features/importExport/api";
 import { MarkdownPreview } from "../features/markdown/MarkdownPreview";
 import {
@@ -203,6 +203,17 @@ function applyFormat(
   });
 }
 
+type UndoDocument = Pick<Document, "execCommand">;
+
+export function runEditorUndo(
+  textarea: HTMLTextAreaElement | null,
+  doc: UndoDocument = document,
+): boolean {
+  if (!textarea || textarea.disabled) return false;
+  textarea.focus();
+  return doc.execCommand("undo");
+}
+
 interface MainWindowProps {
   initialSettingsOpen?: boolean;
   initialConfig?: AppConfig;
@@ -337,6 +348,23 @@ export function MainWindow({
       cancelled = true;
     };
   }, [applyNote, clearCurrentNote]);
+
+  useEffect(() => {
+    const unlisten = listen("notes-changed", () => {
+      void refreshNotes().then((loaded) => {
+        if (selectedId && !loaded.some((n) => n.id === selectedId)) {
+          if (loaded[0]) {
+            void loadNote(loaded[0].id);
+          } else {
+            clearCurrentNote();
+          }
+        }
+      });
+    });
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  }, [refreshNotes, selectedId, loadNote, clearCurrentNote]);
 
   useEffect(() => {
     function closeNoteMenu() {
@@ -602,6 +630,15 @@ export function MainWindow({
 
   const markDirty = () => {
     if (selectedId) setSaveState("dirty");
+  };
+
+  const handleUndo = () => {
+    if (!selectedId) return;
+    const textarea = contentRef.current;
+    if (runEditorUndo(textarea)) {
+      setContent(textarea?.value ?? content);
+      markDirty();
+    }
   };
 
   const handleOpenNotepad = async () => {
@@ -966,6 +1003,31 @@ export function MainWindow({
                   >
                     <path d="M12 17v5" />
                     <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1 1 1 0 0 1 1 1z" />
+                  </svg>
+                </button>
+
+                <button
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={handleUndo}
+                  disabled={!selectedId}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-ink-ghost hover:text-ink-faint hover:bg-paper-warm transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="撤销（Ctrl+Z）"
+                  aria-label="撤销"
+                >
+                  <svg
+                    data-testid="main-editor-undo-icon"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M9 14 4 9l5-5" />
+                    <path d="M4 9h10a6 6 0 0 1 0 12h-1" />
                   </svg>
                 </button>
 
