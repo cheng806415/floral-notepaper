@@ -250,14 +250,6 @@ textarea::placeholder, input::placeholder {
   font-size: 1.1em;
   color: var(--color-ink-soft);
 }
-.katex .mord,
-.katex .mbin,
-.katex .mrel,
-.katex .mopen,
-.katex .mclose,
-.katex .mpunct {
-  color: var(--color-ink-soft);
-}
 .katex .mop {
   color: var(--color-bamboo);
 }
