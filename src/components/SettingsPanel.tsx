@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { useHotkeyRecorder, useHeldKeys } from "@tanstack/react-hotkeys";
+import { useEffect, useRef, useState } from "react";
+import { useHotkeyRecorder } from "@tanstack/react-hotkeys";
 import type { AppConfig, ThemeOption, TileColorMode, ViewMode } from "../features/settings/types";
 import {
   formatHeldKeys,
@@ -288,6 +288,7 @@ interface ShortcutRecorderProps {
 }
 
 function ShortcutRecorder({ value, onChange }: ShortcutRecorderProps) {
+  const [heldKeys, setHeldKeys] = useState<string[]>([]);
   const recorder = useHotkeyRecorder({
     onRecord: (hotkey) => {
       if (isValidGlobalShortcut(hotkey)) {
@@ -295,8 +296,46 @@ function ShortcutRecorder({ value, onChange }: ShortcutRecorderProps) {
       }
     },
   });
-  const heldKeys = useHeldKeys();
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!recorder.isRecording) {
+      setHeldKeys([]);
+      return;
+    }
+
+    const pressed = new Set<string>();
+
+    const toLabel = (e: KeyboardEvent): string => {
+      if (e.key === "Control") return "Control";
+      if (e.key === "Alt") return "Alt";
+      if (e.key === "Shift") return "Shift";
+      if (e.key === "Meta") return "Meta";
+      return e.key.length === 1 ? e.key.toUpperCase() : e.key;
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      pressed.add(toLabel(e));
+      setHeldKeys([...pressed]);
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      pressed.delete(toLabel(e));
+      setHeldKeys([...pressed]);
+    };
+    const onBlur = () => {
+      pressed.clear();
+      setHeldKeys([]);
+    };
+
+    document.addEventListener("keydown", onKeyDown, true);
+    document.addEventListener("keyup", onKeyUp, true);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      document.removeEventListener("keyup", onKeyUp, true);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [recorder.isRecording]);
 
   useEffect(() => {
     if (!recorder.isRecording) return;
@@ -322,31 +361,28 @@ function ShortcutRecorder({ value, onChange }: ShortcutRecorderProps) {
       <button
         type="button"
         onClick={() => recorder.startRecording()}
-        className={`w-full h-8 px-2.5 rounded-lg border text-[12px] flex items-center justify-between cursor-pointer transition-colors ${
+        className={`w-full h-8 px-2.5 rounded-lg border text-[12px] flex items-center gap-2 cursor-pointer transition-colors ${
           recorder.isRecording
-            ? "bg-bamboo-mist/40 border-bamboo text-bamboo"
-            : "bg-paper-warm/70 border-paper-deep/40 text-ink-soft hover:border-paper-deep/60"
+            ? "bg-bamboo-mist/40 border-bamboo"
+            : "bg-paper-warm/70 border-paper-deep/40 hover:border-paper-deep/60"
         }`}
       >
-        <span>
-          {recorder.isRecording ? liveDisplay || "按下快捷键..." : value}
-        </span>
         {recorder.isRecording ? (
-          <span className="text-[10px] text-ink-faint">按 Esc 取消</span>
+          <>
+            <span className="flex-1 text-left text-bamboo">
+              {liveDisplay || "按下快捷键..."}
+            </span>
+            <span className="text-[10px] text-ink-faint shrink-0">
+              Esc 取消
+            </span>
+          </>
         ) : (
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 10 10"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="text-ink-ghost"
-          >
-            <path d="M2 3.5l3 3 3-3" />
-          </svg>
+          <>
+            <span className="flex-1 text-left text-ink-soft">{value}</span>
+            <span className="text-[10px] text-ink-ghost shrink-0">
+              点击录制
+            </span>
+          </>
         )}
       </button>
     </div>
