@@ -72,6 +72,13 @@ pub struct DynamicWindowVisualOptions {
     pub transparent: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MainWindowCloseAction {
+    AllowClose,
+    HideToTray,
+    ExitApp,
+}
+
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WindowBounds {
@@ -283,13 +290,29 @@ pub fn handle_window_event(window: &Window, event: &WindowEvent) {
         return;
     };
 
-    if app_is_exiting(window.app_handle()) || !close_to_tray_enabled() {
-        return;
+    match main_window_close_action(app_is_exiting(window.app_handle()), close_to_tray_enabled()) {
+        MainWindowCloseAction::AllowClose => {}
+        MainWindowCloseAction::HideToTray => {
+            api.prevent_close();
+            if let Err(error) = window.hide() {
+                eprintln!("failed to hide main window to tray: {error}");
+            }
+        }
+        MainWindowCloseAction::ExitApp => {
+            api.prevent_close();
+            mark_app_exiting(window.app_handle());
+            window.app_handle().exit(0);
+        }
     }
+}
 
-    api.prevent_close();
-    if let Err(error) = window.hide() {
-        eprintln!("failed to hide main window to tray: {error}");
+fn main_window_close_action(app_is_exiting: bool, close_to_tray: bool) -> MainWindowCloseAction {
+    if app_is_exiting {
+        MainWindowCloseAction::AllowClose
+    } else if close_to_tray {
+        MainWindowCloseAction::HideToTray
+    } else {
+        MainWindowCloseAction::ExitApp
     }
 }
 
@@ -935,6 +958,14 @@ mod tests {
         assert_eq!(shortcut_from_config(""), None);
         assert_eq!(shortcut_from_config("Ctrl+Shift+Space"), None);
         assert_eq!(shortcut_from_config("Ctrl+K"), None);
+    }
+
+    #[test]
+    fn chooses_exit_when_main_window_closes_without_close_to_tray() {
+        assert_eq!(
+            main_window_close_action(false, false),
+            MainWindowCloseAction::ExitApp
+        );
     }
 
     #[test]

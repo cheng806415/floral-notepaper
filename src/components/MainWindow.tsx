@@ -1269,8 +1269,8 @@ export function MainWindow({
                           dragOverCategory === group.category
                             ? "bg-bamboo/15 border border-bamboo/40 ring-1 ring-bamboo/20"
                             : isCollapsed
-                              ? "bg-bamboo/8 border border-bamboo/15"
-                              : "bg-bamboo/5 border border-bamboo/10 rounded-b-none"
+                              ? "bg-transparent border border-bamboo/15"
+                              : "bg-bamboo/8 border border-bamboo/15 rounded-b-none"
                         }`}
                         onClick={() => toggleCategoryCollapse(group.category)}
                         onContextMenu={(e) => {
