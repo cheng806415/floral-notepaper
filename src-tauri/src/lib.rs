@@ -63,6 +63,22 @@ fn read_external_file(path: String) -> Result<String, AppError> {
 }
 
 #[tauri::command]
+fn get_file_modified_time(path: String) -> Result<f64, AppError> {
+    let metadata = std::fs::metadata(&path).map_err(|e| AppError {
+        code: "io".into(),
+        message: e.to_string(),
+    })?;
+    let modified = metadata.modified().map_err(|e| AppError {
+        code: "io".into(),
+        message: e.to_string(),
+    })?;
+    let duration = modified
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    Ok(duration.as_secs_f64() * 1000.0)
+}
+
+#[tauri::command]
 fn save_external_file(path: String, content: String) -> Result<(), AppError> {
     if let Some(parent) = PathBuf::from(&path).parent() {
         std::fs::create_dir_all(parent).map_err(|e| AppError {
@@ -192,6 +208,7 @@ pub fn run() {
             notes_move_category,
             read_external_file,
             save_external_file,
+            get_file_modified_time,
             categories_list,
             categories_create,
             categories_rename,
