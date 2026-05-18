@@ -255,8 +255,7 @@ textarea::placeholder, input::placeholder {
 .katex .mrel,
 .katex .mopen,
 .katex .mclose,
-.katex .mpunct,
-.katex .mop {
+.katex .mpunct {
   color: var(--color-ink-soft);
 }
 .katex .mop {
@@ -266,7 +265,7 @@ textarea::placeholder, input::placeholder {
   height: 0.5em;
 }
 .katex .katex-error {
-  color: #ef4444;
+  color: var(--color-danger, #ef4444);
   font-size: 0.85em;
   font-family: var(--font-mono);
 }

@@ -219,10 +219,10 @@ function applyFormat(
       break;
     }
     case "blockMath": {
-      const wrapped = `\n$$\n${selected || "\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}"}\n$$\n`;
+      const wrapped = `\n$$\n${selected || "x^2 + y^2 = r^2"}\n$$\n`;
       result = before + wrapped + after;
       cursorStart = start + 4;
-      cursorEnd = cursorStart + (selected || "\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}").length;
+      cursorEnd = cursorStart + (selected || "x^2 + y^2 = r^2").length;
       break;
     }
   }
