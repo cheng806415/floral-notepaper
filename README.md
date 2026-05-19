@@ -6,7 +6,7 @@
 
 # 花笺 Floral Notepaper
 
-轻量、优雅、现代化的本地便签工具
+轻量、优雅、现代化的本地便签工具<br>
 基于 Tauri 2 + React 构建
 
 [反馈问题](https://github.com/Achilng/floral-notepaper/issues) · [更新日志](https://github.com/Achilng/floral-notepaper/releases)
