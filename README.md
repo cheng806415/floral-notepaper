@@ -1,23 +1,43 @@
-# 花笺
+<!-- markdownlint-disable -->
 
-花笺是一款基于 Tauri 2 + React 构建的轻量、优雅、现代化的本地便签工具。
+<div align="center">
+
+<img src="./src-tauri/icons/icon.png" width="120" alt="花笺图标">
+
+# 花笺 Floral Notepaper
+
+轻量、优雅、现代化的本地便签工具
+基于 Tauri 2 + React 构建
+
+[反馈问题](https://github.com/Achilng/floral-notepaper/issues) · [更新日志](https://github.com/Achilng/floral-notepaper/releases)
+
+![Version](https://img.shields.io/badge/version-1.0.2-blue.svg)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+![Stars](https://img.shields.io/github/stars/Achilng/floral-notepaper?color=ffcb47&labelColor=black)
+
+</div>
+
+<!-- markdownlint-restore -->
+
+---
 
 ## 为什么选择花笺
 
 市面上现有的笔记或便签软件，要么功能繁重、上手门槛高，要么界面陈旧、久未更新。花笺因此而生，其特点是轻便、随呼随用，同时提供现代化的界面与舒适的编辑体验。
 
-## 功能
+## 功能特点
 
-- **Markdown 编辑与预览** — 支持GitHub Flavored Markdown语法，支持实时切换编辑和预览模式
-![主窗口截图](Docs/images/主窗口截图.png)
+- **Markdown 编辑与预览** — 支持 GitHub Flavored Markdown 语法，实时切换编辑和预览模式
 
-- **快捷便签** — 通过托盘或全局快捷键（默认 Ctrl+Space）随时唤出便签窗口
+  ![主窗口截图](Docs/images/主窗口截图.png)
 
-![小窗多开示例](Docs/images/小窗多开示例.gif)
+- **快捷便签** — 通过托盘或全局快捷键（默认 `Ctrl+Space`）随时唤出便签窗口
+
+  ![小窗多开示例](Docs/images/小窗多开示例.gif)
 
 - **磁贴模式** — 将笔记固定在桌面某处，以便快速查阅和复制
 
-![磁贴示例](Docs/images/AI绘画截图.png)
+  ![磁贴示例](Docs/images/AI绘画截图.png)
 
 - **导入导出** — 支持 `.md` 文件的导入和导出
 
@@ -28,14 +48,11 @@
 - 临时记录思路或灵感
 - 桌面待办清单
 
-
 ## 下载安装
 
 前往 [GitHub Releases](https://github.com/Achilng/floral-notepaper/releases) 下载最新版本。
 
-> 目前仅在 Windows 11 上测试，其他系统版本的兼容性尚未验证。
-
-## 从源码构建（非开发者不用看）
+## 从源码构建
 
 ### 环境要求
 
@@ -59,6 +76,14 @@ npm run tauri build
 ```
 
 构建产物输出到 `src-tauri/target/release/bundle/`。
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Achilng/floral-notepaper&type=Date&legend=top-left)](https://star-history.com/#Achilng/floral-notepaper&Date)
+
+## 🌟 贡献者
+
+[![contrib.rocks](https://contrib.rocks/image?repo=Achilng/floral-notepaper&max=1000)](https://contrib.rocks/image?repo=Achilng/floral-notepaper&max=1000)
 
 ## 许可证
 
