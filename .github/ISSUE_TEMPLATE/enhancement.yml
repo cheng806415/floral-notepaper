@@ -1,0 +1,36 @@
+name: 功能建议
+description: 提出新功能或现有功能的改进建议
+labels: ["enhancement"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请仅提交一个建议，多个建议请分别提交 issue。
+
+  - type: checkboxes
+    attributes:
+      label: 提交前请确认
+      options:
+        - label: 已在仓库中搜索过，没有找到相同或类似的 issue
+          required: true
+        - label: 确认本次仅提交**一个**建议
+          required: true
+
+  - type: checkboxes
+    id: platform
+    attributes:
+      label: 平台
+      description: 请选择建议涉及的平台（可多选）
+      options:
+        - label: Windows
+        - label: macOS
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: 建议描述
+      placeholder: 尽量详细地描述你的建议
+    validations:
+      required: true

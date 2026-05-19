@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { getConfig } from "../features/settings/api";
+import type { AppConfig } from "../features/settings/types";
 import { requestSurfaceAction } from "../features/windows/surfaceActions";
 import { tileContextMenuItems } from "../features/windows/tileContextMenu";
 
@@ -13,6 +16,17 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [menuClosing, setMenuClosing] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const tileCtrlCloseRef = useRef(true);
+
+  useEffect(() => {
+    getConfig()
+      .then((c) => { tileCtrlCloseRef.current = c.tileCtrlClose ?? true; })
+      .catch(() => {});
+    const unlisten = listen<AppConfig>("config-changed", (event) => {
+      tileCtrlCloseRef.current = event.payload.tileCtrlClose ?? true;
+    });
+    return () => { void unlisten.then((fn) => fn()); };
+  }, []);
 
   useEffect(() => {
     function handleContextMenu(event: MouseEvent) {
@@ -30,7 +44,7 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
 
       event.preventDefault();
 
-      if (tileTarget && event.ctrlKey) {
+      if (tileTarget && event.ctrlKey && tileCtrlCloseRef.current) {
         requestSurfaceAction("close");
         return;
       }

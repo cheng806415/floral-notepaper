@@ -18,4 +18,8 @@ export interface AppConfig {
   fontSize: number;
   surfaceFontSize: number;
   externalFileAutoSave: boolean;
+  rememberSurfaceSize: boolean;
+  tileCtrlClose: boolean;
+  surfaceWidth?: number;
+  surfaceHeight?: number;
 }

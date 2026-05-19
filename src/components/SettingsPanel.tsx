@@ -153,6 +153,20 @@ export function SettingsPanel({
               setConfigValue("externalFileAutoSave", checked)
             }
           />
+          <ToggleRow
+            label="记住小窗尺寸"
+            checked={config.rememberSurfaceSize}
+            onChange={(checked) =>
+              setConfigValue("rememberSurfaceSize", checked)
+            }
+          />
+          <ToggleRow
+            label="Ctrl+右键快速关闭磁贴"
+            checked={config.tileCtrlClose}
+            onChange={(checked) =>
+              setConfigValue("tileCtrlClose", checked)
+            }
+          />
         </section>
 
         <section className="space-y-2">
