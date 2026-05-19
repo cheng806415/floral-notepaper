@@ -53,22 +53,22 @@ const rehypePlugins = [rehypeKatex];
 
 const components: Components = {
   h1: ({ children }) => (
-    <h1 className="text-[22px] font-display font-bold text-ink mt-6 mb-4 tracking-wide">
+    <h1 className="text-[1.57em] font-display font-bold text-ink mt-6 mb-4 tracking-wide">
       {children}
     </h1>
   ),
   h2: ({ children }) => (
-    <h2 className="text-[17px] font-display font-bold text-ink mt-7 mb-3 tracking-wide">
+    <h2 className="text-[1.21em] font-display font-bold text-ink mt-7 mb-3 tracking-wide">
       {children}
     </h2>
   ),
   h3: ({ children }) => (
-    <h3 className="text-[15px] font-display font-bold text-ink mt-5 mb-2 tracking-wide">
+    <h3 className="text-[1.07em] font-display font-bold text-ink mt-5 mb-2 tracking-wide">
       {children}
     </h3>
   ),
   h4: ({ children }) => (
-    <h4 className="text-[14px] font-display font-semibold text-ink mt-4 mb-2 tracking-wide">
+    <h4 className="text-[1em] font-display font-semibold text-ink mt-4 mb-2 tracking-wide">
       {children}
     </h4>
   ),
@@ -92,7 +92,7 @@ const components: Components = {
     </ul>
   ),
   ol: ({ children }) => (
-    <ol className="ml-4 text-ink-soft leading-[1.9] list-decimal list-outside marker:text-bamboo/50 marker:font-mono marker:text-[12px]">
+    <ol className="ml-4 text-ink-soft leading-[1.9] list-decimal list-outside marker:text-bamboo/50 marker:font-mono marker:text-[0.85em]">
       {children}
     </ol>
   ),
@@ -106,13 +106,13 @@ const components: Components = {
     const isBlock = className?.startsWith("language-") || String(children).includes("\n");
     if (isBlock) {
       return (
-        <code className="text-[12px] font-mono text-ink-soft leading-[1.8] whitespace-pre">
+        <code className="text-[0.85em] font-mono text-ink-soft leading-[1.8] whitespace-pre">
           {children}
         </code>
       );
     }
     return (
-      <code className="px-1.5 py-0.5 text-[12px] font-mono bg-paper-warm rounded text-bamboo">
+      <code className="px-1.5 py-0.5 text-[0.85em] font-mono bg-paper-warm rounded text-bamboo">
         {children}
       </code>
     );
@@ -132,11 +132,11 @@ const components: Components = {
   ),
   table: ({ children }) => (
     <div className="my-3 overflow-x-auto">
-      <table className="w-full text-[13px] border-collapse">{children}</table>
+      <table className="w-full text-[0.93em] border-collapse">{children}</table>
     </div>
   ),
   th: ({ children }) => (
-    <th className="text-left px-3 py-1.5 border-b border-paper-deep/30 font-semibold text-ink text-[12px]">
+    <th className="text-left px-3 py-1.5 border-b border-paper-deep/30 font-semibold text-ink text-[0.85em]">
       {children}
     </th>
   ),
