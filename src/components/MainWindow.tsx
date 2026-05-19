@@ -292,6 +292,9 @@ export function MainWindow({
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+  const [splitRatio, setSplitRatio] = useState(0.5);
+  const [isResizingSplit, setIsResizingSplit] = useState(false);
+  const splitContainerRef = useRef<HTMLDivElement>(null);
   const [categoryMenu, setCategoryMenu] = useState<CategoryMenuState | null>(null);
   const [categoryMenuClosing, setCategoryMenuClosing] = useState(false);
   const [categoryMenuConfirmDelete, setCategoryMenuConfirmDelete] = useState(false);
@@ -977,6 +980,31 @@ export function MainWindow({
       document.body.style.cursor = "";
     };
   }, [isResizingSidebar]);
+
+  useEffect(() => {
+    if (!isResizingSplit) return;
+
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+
+    const onMouseMove = (e: globalThis.MouseEvent) => {
+      const container = splitContainerRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const ratio = (e.clientX - rect.left) / rect.width;
+      setSplitRatio(Math.min(Math.max(ratio, 0.2), 0.8));
+    };
+    const onMouseUp = () => setIsResizingSplit(false);
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+  }, [isResizingSplit]);
 
   const handlePinEntry = async () => {
     if (!selectedId) return;
@@ -1780,7 +1808,7 @@ export function MainWindow({
               </div>
             </div>
 
-            <div key={viewMode} className="flex-1 flex min-h-0 animate-view-fade">
+            <div key={viewMode} ref={splitContainerRef} className="flex-1 flex min-h-0 animate-view-fade">
               {!selectedId && !isLoading ? (
                 <div className="flex-1 flex items-center justify-center text-[13px] text-ink-ghost">
                   选择或新建一篇笔记
@@ -1789,11 +1817,8 @@ export function MainWindow({
                 <>
                   {(viewMode === "edit" || viewMode === "split") && (
                     <div
-                      className={`flex flex-col min-h-0 ${
-                        viewMode === "split"
-                          ? "w-1/2 border-r border-paper-deep/20"
-                          : "w-full"
-                      }`}
+                      className="flex flex-col min-h-0 shrink-0"
+                      style={{ width: viewMode === "split" ? `${splitRatio * 100}%` : "100%" }}
                     >
                       <div className="flex items-center gap-0.5 px-4 pt-2 pb-1 shrink-0">
                         {toolbarButtons.map((button) => (
@@ -1813,7 +1838,7 @@ export function MainWindow({
                         ))}
                       </div>
 
-                      <div className="flex-1 overflow-y-auto px-5 pb-4">
+                      <div className="flex-1 overflow-hidden px-5 pb-4">
                         <textarea
                           ref={contentRef}
                           value={content}
@@ -1831,11 +1856,21 @@ export function MainWindow({
                     </div>
                   )}
 
+                  {viewMode === "split" && (
+                    <div
+                      className={`w-1 shrink-0 cursor-col-resize group relative ${isResizingSplit ? "bg-bamboo/30" : "hover:bg-bamboo/20"} transition-colors`}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setIsResizingSplit(true);
+                      }}
+                    >
+                      <div className={`absolute inset-y-0 -left-1 -right-1 ${isResizingSplit ? "" : "group-hover:bg-bamboo/5"}`} />
+                    </div>
+                  )}
+
                   {(viewMode === "preview" || viewMode === "split") && (
                     <div
-                      className={`flex flex-col min-h-0 ${
-                        viewMode === "split" ? "w-1/2" : "w-full"
-                      }`}
+                      className="flex flex-col min-h-0 min-w-0 flex-1"
                     >
                       {viewMode === "split" && (
                         <div className="px-4 pt-2.5 pb-1 shrink-0">
