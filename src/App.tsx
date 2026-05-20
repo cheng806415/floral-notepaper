@@ -44,8 +44,7 @@ function App() {
       }
     };
     document.addEventListener("keydown", preventSystemMenu, true);
-    return () =>
-      document.removeEventListener("keydown", preventSystemMenu, true);
+    return () => document.removeEventListener("keydown", preventSystemMenu, true);
   }, []);
 
   return (

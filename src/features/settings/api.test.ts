@@ -1,12 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import {
-  chooseNotesDirectory,
-  getConfig,
-  normalizeViewMode,
-  saveConfig,
-} from "./api";
+import { chooseNotesDirectory, getConfig, normalizeViewMode, saveConfig } from "./api";
 import type { AppConfig } from "./types";
 
 vi.mock("@tauri-apps/api/core", () => ({

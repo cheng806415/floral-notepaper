@@ -1,13 +1,12 @@
 import chroma from "chroma-js";
 import type { CSSProperties, HTMLAttributes } from "react";
-import {
-  DEFAULT_TILE_COLOR,
-  normalizeTileColor,
-} from "../features/settings/tileColor";
+import { DEFAULT_TILE_COLOR, normalizeTileColor } from "../features/settings/tileColor";
 import { MarkdownPreview } from "../features/markdown/MarkdownPreview";
 
-export interface TileProps
-  extends Omit<HTMLAttributes<HTMLDivElement>, "color" | "content" | "title"> {
+export interface TileProps extends Omit<
+  HTMLAttributes<HTMLDivElement>,
+  "color" | "content" | "title"
+> {
   title?: string;
   content: string;
   color?: string;
@@ -104,7 +103,10 @@ export function Tile({
     >
       <div className="px-4 pt-4 pb-4 h-full overflow-y-auto scrollbar-hidden">
         {title && (
-          <div className="font-display tracking-wide mb-3 leading-snug" style={{ color: titleColor, fontSize: `${fontSize + 1}px` }}>
+          <div
+            className="font-display tracking-wide mb-3 leading-snug"
+            style={{ color: titleColor, fontSize: `${fontSize + 1}px` }}
+          >
             {title}
           </div>
         )}
@@ -114,12 +116,18 @@ export function Tile({
               <MarkdownPreview content={content} fontSize={fontSize} />
             </div>
           ) : (
-            <div className="leading-[1.8] whitespace-pre-wrap font-body" style={{ color: contentColor, fontSize: `${fontSize}px` }}>
+            <div
+              className="leading-[1.8] whitespace-pre-wrap font-body"
+              style={{ color: contentColor, fontSize: `${fontSize}px` }}
+            >
               {content}
             </div>
           )
         ) : (
-          <div className="font-body text-center py-6" style={{ color: emptyColor, fontSize: `${fontSize}px` }}>
+          <div
+            className="font-body text-center py-6"
+            style={{ color: emptyColor, fontSize: `${fontSize}px` }}
+          >
             空
           </div>
         )}
@@ -130,4 +138,3 @@ export function Tile({
     </div>
   );
 }
-

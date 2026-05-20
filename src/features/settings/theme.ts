@@ -2,9 +2,7 @@ import type { ThemeOption } from "./types";
 
 function resolveTheme(option: ThemeOption): "light" | "dark" {
   if (option === "system") {
-    return window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
   return option;
 }
