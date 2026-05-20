@@ -380,8 +380,20 @@ pub fn runtime_config_changes(previous: &AppConfig, next: &AppConfig) -> Runtime
 }
 
 fn clear_hidden_window_state(app: &AppHandle) {
-    if let Some(state) = app.try_state::<RuntimeState>() {
-        state.clear_hidden_windows();
+    let labels = app
+        .try_state::<RuntimeState>()
+        .and_then(|state| state.take_hidden_window_labels());
+
+    let Some(labels) = labels else {
+        return;
+    };
+
+    for label in &labels {
+        if label.starts_with("notepad-") || label.starts_with("tile-") {
+            if let Some(window) = app.get_webview_window(label) {
+                let _ = window.close();
+            }
+        }
     }
 }
 
