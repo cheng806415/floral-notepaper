@@ -38,6 +38,8 @@ pub struct AppConfig {
     pub surface_width: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub surface_height: Option<u32>,
+    #[serde(default = "default_toggle_visibility_shortcut")]
+    pub toggle_visibility_shortcut: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -503,6 +505,7 @@ impl NoteStore {
             tile_ctrl_close: default_tile_ctrl_close(),
             surface_width: None,
             surface_height: None,
+            toggle_visibility_shortcut: default_toggle_visibility_shortcut(),
         }
     }
 
@@ -787,6 +790,10 @@ fn default_tile_ctrl_close() -> bool {
     true
 }
 
+fn default_toggle_visibility_shortcut() -> String {
+    String::new()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -919,8 +926,10 @@ mod tests {
             surface_font_size: 16,
             external_file_auto_save: true,
             remember_surface_size: true,
+            tile_ctrl_close: true,
             surface_width: None,
             surface_height: None,
+            toggle_visibility_shortcut: String::new(),
         };
 
         store.save_config(saved.clone()).expect("save config");

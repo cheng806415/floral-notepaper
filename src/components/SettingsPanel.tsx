@@ -169,6 +169,15 @@ export function SettingsPanel({
               onChange={(v) => setConfigValue("globalShortcut", v)}
             />
           </div>
+          <div className="space-y-1.5">
+            <label className="block text-[11px] font-body text-ink-faint/70 px-0.5">
+              显示/隐藏窗口快捷键
+            </label>
+            <ShortcutRecorder
+              value={config.toggleVisibilityShortcut}
+              onChange={(v) => setConfigValue("toggleVisibilityShortcut", v)}
+            />
+          </div>
         </section>
 
         <section className="space-y-2">

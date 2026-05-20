@@ -43,6 +43,7 @@ describe("settings api", () => {
       externalFileAutoSave: true,
       rememberSurfaceSize: true,
       tileCtrlClose: true,
+      toggleVisibilityShortcut: "",
     };
     mockedInvoke.mockResolvedValue(config);
 
@@ -68,6 +69,7 @@ describe("settings api", () => {
       externalFileAutoSave: true,
       rememberSurfaceSize: true,
       tileCtrlClose: true,
+      toggleVisibilityShortcut: "",
     };
     mockedInvoke.mockResolvedValue(config);
 

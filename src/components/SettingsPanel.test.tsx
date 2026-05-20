@@ -18,6 +18,7 @@ const config = {
   externalFileAutoSave: true,
   rememberSurfaceSize: true,
   tileCtrlClose: true,
+  toggleVisibilityShortcut: "",
 };
 
 describe("SettingsPanel", () => {
