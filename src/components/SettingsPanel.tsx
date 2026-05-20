@@ -284,7 +284,9 @@ function ShortcutRecorder({ value, onChange }: ShortcutRecorderProps) {
   const [heldKeys, setHeldKeys] = useState<string[]>([]);
   const recorder = useHotkeyRecorder({
     onRecord: (hotkey) => {
-      if (isValidGlobalShortcut(hotkey)) {
+      if (hotkey === "") {
+        onChange("");
+      } else if (isValidGlobalShortcut(hotkey)) {
         onChange(hotkeyToConfigString(hotkey));
       }
     },
@@ -356,12 +358,16 @@ function ShortcutRecorder({ value, onChange }: ShortcutRecorderProps) {
       >
         {recorder.isRecording ? (
           <>
-            <span className="flex-1 text-left text-bamboo">{liveDisplay || "按下快捷键..."}</span>
+            <span className="flex-1 text-left text-bamboo">
+              {liveDisplay || "按下快捷键；按 Delete 清空。"}
+            </span>
             <span className="text-[10px] text-ink-faint shrink-0">Esc 取消</span>
           </>
         ) : (
           <>
-            <span className="flex-1 text-left text-ink-soft">{value}</span>
+            <span className={`flex-1 text-left ${value ? "text-ink-soft" : "text-ink-ghost"}`}>
+              {value || "未设置"}
+            </span>
             <span className="text-[10px] text-ink-ghost shrink-0">点击录制</span>
           </>
         )}
