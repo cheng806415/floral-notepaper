@@ -284,7 +284,7 @@ function ShortcutRecorder({ value, onChange }: ShortcutRecorderProps) {
   const [heldKeys, setHeldKeys] = useState<string[]>([]);
   const recorder = useHotkeyRecorder({
     onRecord: (hotkey) => {
-      if (hotkey === "") {
+      if ((hotkey as string) === "") {
         onChange("");
       } else if (isValidGlobalShortcut(hotkey)) {
         onChange(hotkeyToConfigString(hotkey));

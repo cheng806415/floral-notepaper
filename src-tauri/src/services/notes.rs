@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{
     env, fmt, fs, io,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 use uuid::Uuid;
 
@@ -165,6 +165,70 @@ fn default_base_dir() -> Result<PathBuf, AppError> {
     Ok(env::current_dir()?.join("data"))
 }
 
+fn is_filesystem_root(path: &Path) -> bool {
+    let path = path.to_string_lossy();
+    let trimmed = path.trim_end_matches(['/', '\\']);
+    if trimmed.is_empty() {
+        return true;
+    }
+    // Windows drive root: "C:" or "D:" etc.
+    if trimmed.len() == 2 {
+        let bytes = trimmed.as_bytes();
+        if bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+            return true;
+        }
+    }
+    false
+}
+
+fn ensure_notes_suffix(dir: &str) -> String {
+    let path = Path::new(dir);
+    if path.file_name().and_then(|n| n.to_str()) == Some("notes") {
+        return dir.to_string();
+    }
+    path.join("notes").to_string_lossy().to_string()
+}
+
+fn is_safe_notes_dir(path: &Path) -> Result<(), AppError> {
+    if is_filesystem_root(path) {
+        return Err(AppError::new(
+            "unsafePath",
+            "不能将磁盘根目录设为笔记目录，请选择一个子文件夹",
+        ));
+    }
+
+    let normalized = path.to_string_lossy().to_lowercase();
+    let blocked = [
+        "\\windows",
+        "\\program files",
+        "\\program files (x86)",
+        "\\system32",
+        "\\syswow64",
+    ];
+    for suffix in &blocked {
+        if normalized.ends_with(suffix) {
+            return Err(AppError::new(
+                "unsafePath",
+                format!("不能将系统目录「{}」设为笔记目录", path.display()),
+            ));
+        }
+    }
+
+    // Must have at least 2 real path components (e.g. D:\Something, not just D:\)
+    let real_components = path
+        .components()
+        .filter(|c| matches!(c, Component::Normal(_)))
+        .count();
+    if real_components == 0 {
+        return Err(AppError::new(
+            "unsafePath",
+            "笔记目录路径不合法，请选择一个具体的文件夹",
+        ));
+    }
+
+    Ok(())
+}
+
 impl NoteStore {
     pub fn new(base_dir: PathBuf) -> Self {
         Self { base_dir }
@@ -191,15 +255,22 @@ impl NoteStore {
             return Ok(config);
         }
 
-        let config: AppConfig = serde_json::from_str(&fs::read_to_string(path)?)?;
+        let mut config: AppConfig = serde_json::from_str(&fs::read_to_string(&path)?)?;
+        if is_safe_notes_dir(Path::new(&config.notes_dir)).is_err() {
+            config.notes_dir = self.default_config().notes_dir;
+            write_json_atomic(&path, &config)?;
+        }
         fs::create_dir_all(&config.notes_dir)?;
         Ok(config)
     }
 
-    pub fn save_config(&self, config: AppConfig) -> Result<(), AppError> {
+    pub fn save_config(&self, mut config: AppConfig) -> Result<AppConfig, AppError> {
         self.ensure_base_dir()?;
+        config.notes_dir = ensure_notes_suffix(&config.notes_dir);
+        is_safe_notes_dir(Path::new(&config.notes_dir))?;
         fs::create_dir_all(&config.notes_dir)?;
-        write_json_atomic(&self.config_path(), &config)
+        write_json_atomic(&self.config_path(), &config)?;
+        Ok(config)
     }
 
     pub fn list_notes(&self) -> Result<Vec<NoteMetadata>, AppError> {
@@ -295,7 +366,8 @@ impl NoteStore {
         if old_file_name != new_file_name || old_category != new_category {
             let old_path = self.note_path_in_category(&old_file_name, &old_category);
             if old_path.exists() && old_path != new_path {
-                fs::remove_file(old_path)?;
+                trash::delete(&old_path)
+                    .map_err(|e| AppError::new("trash", format!("移入回收站失败: {e}")))?;
             }
         }
 
@@ -332,7 +404,8 @@ impl NoteStore {
         let metadata = metadata_file.notes.remove(index);
         let path = self.note_path_in_category(&metadata.file_name, &metadata.category);
         if path.exists() {
-            fs::remove_file(&path)?;
+            trash::delete(&path)
+                .map_err(|e| AppError::new("trash", format!("移入回收站失败: {e}")))?;
         }
         self.save_metadata(&metadata_file)
     }
@@ -431,6 +504,19 @@ impl NoteStore {
             return Err(AppError::not_found(format!("分类「{name}」不存在")));
         }
 
+        // Safety: ensure the category path is actually inside notes_dir
+        let canon_notes = fs::canonicalize(&notes_dir).unwrap_or_else(|_| notes_dir.clone());
+        let canon_cat = fs::canonicalize(&category_path).unwrap_or_else(|_| category_path.clone());
+        if !canon_cat.starts_with(&canon_notes) || canon_cat == canon_notes {
+            return Err(AppError::new(
+                "unsafePath",
+                format!(
+                    "拒绝删除「{}」：路径不在笔记目录内",
+                    category_path.display()
+                ),
+            ));
+        }
+
         // Move all notes in this category to uncategorized (root)
         let mut metadata_file = self.load_metadata()?;
         for note in &mut metadata_file.notes {
@@ -445,9 +531,10 @@ impl NoteStore {
         }
         self.save_metadata(&metadata_file)?;
 
-        // Remove the now-empty directory
+        // Move to recycle bin instead of permanent deletion
         if category_path.exists() {
-            fs::remove_dir_all(&category_path)?;
+            trash::delete(&category_path)
+                .map_err(|e| AppError::new("trash", format!("移入回收站失败: {e}")))?;
         }
         Ok(())
     }

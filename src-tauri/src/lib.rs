@@ -146,9 +146,9 @@ fn config_save(app: AppHandle, config: AppConfig) -> Result<AppConfig, AppError>
         code: "desktopConfig".into(),
         message: error.to_string(),
     })?;
-    store.save_config(config.clone())?;
-    let _ = app.emit("config-changed", &config);
-    Ok(config)
+    let saved = store.save_config(config)?;
+    let _ = app.emit("config-changed", &saved);
+    Ok(saved)
 }
 
 #[tauri::command]
