@@ -6,6 +6,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import rehypeSlug from "rehype-slug";
 import type { Pluggable } from "unified";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { Components } from "react-markdown";
@@ -67,31 +68,32 @@ const sanitizeSchema = {
     abbr: ["title"],
   },
 };
-const rehypePluginsDefault = [rehypeKatex];
+const rehypePluginsDefault = [rehypeKatex, rehypeSlug];
 const rehypePluginsWithHtml: Pluggable[] = [
   rehypeRaw,
   [rehypeSanitize, sanitizeSchema],
   rehypeKatex,
+  rehypeSlug,
 ];
 
 const components: Components = {
-  h1: ({ children }) => (
-    <h1 className="text-[1.57em] font-display font-bold text-ink mt-6 mb-4 tracking-wide">
+  h1: ({ children, id }) => (
+    <h1 id={id} className="text-[1.57em] font-display font-bold text-ink mt-6 mb-4 tracking-wide">
       {children}
     </h1>
   ),
-  h2: ({ children }) => (
-    <h2 className="text-[1.21em] font-display font-bold text-ink mt-7 mb-3 tracking-wide">
+  h2: ({ children, id }) => (
+    <h2 id={id} className="text-[1.21em] font-display font-bold text-ink mt-7 mb-3 tracking-wide">
       {children}
     </h2>
   ),
-  h3: ({ children }) => (
-    <h3 className="text-[1.07em] font-display font-bold text-ink mt-5 mb-2 tracking-wide">
+  h3: ({ children, id }) => (
+    <h3 id={id} className="text-[1.07em] font-display font-bold text-ink mt-5 mb-2 tracking-wide">
       {children}
     </h3>
   ),
-  h4: ({ children }) => (
-    <h4 className="text-[1em] font-display font-semibold text-ink mt-4 mb-2 tracking-wide">
+  h4: ({ children, id }) => (
+    <h4 id={id} className="text-[1em] font-display font-semibold text-ink mt-4 mb-2 tracking-wide">
       {children}
     </h4>
   ),
@@ -138,7 +140,13 @@ const components: Components = {
       href={href}
       onClick={(e) => {
         e.preventDefault();
-        if (href && /^https?:\/\//i.test(href)) openUrl(href);
+        if (!href) return;
+        if (/^https?:\/\//i.test(href)) {
+          openUrl(href);
+        } else if (href.startsWith("#")) {
+          const id = decodeURIComponent(href.slice(1));
+          document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+        }
       }}
       className="text-bamboo hover:text-bamboo-light underline underline-offset-2 cursor-pointer"
     >
