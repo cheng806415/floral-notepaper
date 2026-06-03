@@ -35,9 +35,12 @@
     "categoryNotFound": "分类「{{category}}」不存在",
     "desktopConfig": "桌面配置更新失败",
     "duplicateShortcut": "显示/隐藏窗口快捷键不能与呼出小窗快捷键重复",
+    "imagePasteFailed": "图片粘贴失败",
+    "imageTooLarge": "图片文件过大（上限 20 MB）",
     "noPool": "便签窗口池尚未初始化",
     "noteNotFound": "找不到该笔记",
     "unsupportedFile": "只支持导入 .md 文件",
+    "unsupportedImageFormat": "不支持的图片格式",
     "unsupportedShortcut": "{{field}} 配置无效",
     "unsupportedShortcutGeneric": "快捷键配置无效"
   },
@@ -95,6 +98,11 @@
       "importMarkdown": "导入 Markdown",
       "newNote": "新建笔记",
       "searchPlaceholder": "搜索笔记…"
+    },
+    "images": {
+      "cleanUnused": "清理未使用图片",
+      "cleaned": "已清理 {{count}} 张图片",
+      "cleanedNone": "没有需要清理的图片"
     },
     "statusBar": {
       "byteSize": "{{size}} KB",

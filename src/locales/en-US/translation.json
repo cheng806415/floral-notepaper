@@ -35,9 +35,12 @@
     "categoryNotFound": "Category \"{{category}}\" not found",
     "desktopConfig": "Failed to update desktop configuration",
     "duplicateShortcut": "Show/Hide shortcut cannot be the same as Quick Note shortcut",
+    "imagePasteFailed": "Image paste failed",
+    "imageTooLarge": "Image file too large (max 20 MB)",
     "noPool": "Notepad window pool not yet initialized",
     "noteNotFound": "Note not found",
     "unsupportedFile": "Only .md files are supported",
+    "unsupportedImageFormat": "Unsupported image format",
     "unsupportedShortcut": "{{field}} configuration is invalid",
     "unsupportedShortcutGeneric": "Shortcut configuration is invalid"
   },
@@ -95,6 +98,11 @@
       "importMarkdown": "Import Markdown",
       "newNote": "New Note",
       "searchPlaceholder": "Search notes…"
+    },
+    "images": {
+      "cleanUnused": "Clean unused images",
+      "cleaned": "Cleaned {{count}} image(s)",
+      "cleanedNone": "No unused images"
     },
     "statusBar": {
       "byteSize": "{{size}} KB",

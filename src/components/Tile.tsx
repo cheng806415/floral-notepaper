@@ -16,6 +16,7 @@ export interface TileProps extends Omit<
   rotation?: number;
   fontSize?: number;
   renderMarkdown?: boolean;
+  imageBaseDir?: string;
 }
 
 const MARK_SIZE = 8;
@@ -75,6 +76,7 @@ export function Tile({
   rotation = 0,
   fontSize = 14,
   renderMarkdown = false,
+  imageBaseDir,
   className = "",
   style,
   children,
@@ -120,7 +122,12 @@ export function Tile({
         {content ? (
           renderMarkdown ? (
             <div style={{ color: contentColor }}>
-              <MarkdownPreview content={content} fontSize={fontSize} renderHtml={false} />
+              <MarkdownPreview
+                content={content}
+                fontSize={fontSize}
+                renderHtml={false}
+                imageBaseDir={imageBaseDir}
+              />
             </div>
           ) : (
             <div

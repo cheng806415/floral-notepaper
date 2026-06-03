@@ -5,7 +5,7 @@ pub mod services;
 use locales::Locale;
 use services::notes::{default_store, AppConfig, AppError, Note, NoteMetadata, SaveNoteRequest};
 use std::{fs, path::PathBuf};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 #[tauri::command]
 fn app_name() -> Result<String, AppError> {
@@ -139,6 +139,30 @@ fn notes_move_category(
     let result = default_store()?.move_note_to_category(&id, &category)?;
     let _ = app.emit("notes-changed", ());
     Ok(result)
+}
+
+#[tauri::command]
+fn images_save(note_id: String, data: Vec<u8>, extension: String) -> Result<String, AppError> {
+    default_store()?.save_image(&note_id, &data, &extension)
+}
+
+#[tauri::command]
+fn images_get_base_dir() -> Result<String, AppError> {
+    let store = default_store()?;
+    store
+        .base_dir()
+        .to_str()
+        .map(str::to_string)
+        .ok_or_else(|| AppError {
+            code: "path".into(),
+            message: "invalid base dir path".into(),
+            details: Default::default(),
+        })
+}
+
+#[tauri::command]
+fn images_clean_unused(note_id: String, content: String) -> Result<Vec<String>, AppError> {
+    default_store()?.clean_unused_images(&note_id, &content)
 }
 
 #[tauri::command]
@@ -289,6 +313,12 @@ pub fn run() {
             let _ = desktop::show_main_window(app);
         }))
         .setup(|app| {
+            if let Ok(store) = default_store() {
+                let base = store.base_dir();
+                let scope = app.asset_protocol_scope();
+                let _ = scope.allow_directory(base.join("images"), true);
+                let _ = scope.allow_directory(base.join("backgrounds"), true);
+            }
             desktop::setup_desktop(app)?;
             Ok(())
         })
@@ -310,6 +340,9 @@ pub fn run() {
             categories_create,
             categories_rename,
             categories_delete,
+            images_save,
+            images_get_base_dir,
+            images_clean_unused,
             config_get,
             copy_background_image,
             config_save,

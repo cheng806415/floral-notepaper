@@ -482,7 +482,83 @@ impl NoteStore {
             trash::delete(&path)
                 .map_err(|e| AppError::new("trash", format!("移入回收站失败: {e}")))?;
         }
-        self.save_metadata(&metadata_file)
+        self.save_metadata(&metadata_file)?;
+        let _ = self.delete_note_images(id);
+        Ok(())
+    }
+
+    pub fn images_dir(&self, note_id: &str) -> PathBuf {
+        self.base_dir.join("images").join(note_id)
+    }
+
+    pub fn save_image(
+        &self,
+        note_id: &str,
+        data: &[u8],
+        extension: &str,
+    ) -> Result<String, AppError> {
+        self.ensure_storage()?;
+        self.find_metadata(note_id)?;
+
+        const ALLOWED_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"];
+        let ext = extension.to_ascii_lowercase();
+        if !ALLOWED_EXTENSIONS.contains(&ext.as_str()) {
+            return Err(AppError::new(
+                "unsupportedImageFormat",
+                format!("不支持的图片格式: {ext}"),
+            ));
+        }
+
+        let dir = self.images_dir(note_id);
+        fs::create_dir_all(&dir)?;
+
+        let file_name = format!("{}.{}", Uuid::new_v4(), ext);
+        fs::write(dir.join(&file_name), data)?;
+
+        Ok(format!("images/{note_id}/{file_name}"))
+    }
+
+    pub fn delete_note_images(&self, note_id: &str) -> Result<(), AppError> {
+        let dir = self.images_dir(note_id);
+        if dir.exists() {
+            fs::remove_dir_all(&dir)?;
+        }
+        Ok(())
+    }
+
+    pub fn clean_unused_images(
+        &self,
+        note_id: &str,
+        content: &str,
+    ) -> Result<Vec<String>, AppError> {
+        let dir = self.images_dir(note_id);
+        if !dir.exists() {
+            return Ok(Vec::new());
+        }
+
+        let mut removed = Vec::new();
+        let mut remaining = 0usize;
+        for entry in fs::read_dir(&dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let file_name = entry.file_name().to_string_lossy().to_string();
+            let relative = format!("images/{note_id}/{file_name}");
+            if !content.contains(&relative) {
+                fs::remove_file(&path)?;
+                removed.push(file_name);
+            } else {
+                remaining += 1;
+            }
+        }
+
+        if remaining == 0 {
+            let _ = fs::remove_dir(&dir);
+        }
+
+        Ok(removed)
     }
 
     pub fn import_markdown_file(&self, path: &Path, category: &str) -> Result<Note, AppError> {

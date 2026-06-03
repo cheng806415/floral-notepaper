@@ -3,6 +3,8 @@ import type { MouseEvent } from "react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { createNote, getErrorMessage, getNote, listNotes, updateNote } from "../features/notes/api";
+import { useImagePaste } from "../features/images/useImagePaste";
+import { useImageBaseDir } from "../features/images/useImageBaseDir";
 import type { Note, NoteMetadata } from "../features/notes/types";
 import {
   countNoteChars,
@@ -318,6 +320,32 @@ export function NotePad({
     [content, editingNoteId, title],
   );
 
+  const imageBaseDir = useImageBaseDir();
+
+  const ensureNoteSaved = useCallback(async (): Promise<string | null> => {
+    if (editingNoteId) return editingNoteId;
+    try {
+      const note = await saveNote();
+      return note.id;
+    } catch {
+      return null;
+    }
+  }, [editingNoteId, saveNote]);
+
+  const {
+    handlePaste: imagePasteHandler,
+    handleDrop: imageDropHandler,
+    handleDragOver: imageDragOverHandler,
+  } = useImagePaste({
+    noteId: editingNoteId,
+    textareaRef: contentRef,
+    setContent,
+    markDirty: () => setStatus("dirty"),
+    onEnsureNoteSaved: ensureNoteSaved,
+    onError: setErrorMessage,
+    t,
+  });
+
   const tileNoteId = editingNoteId ?? initialNoteId ?? "";
 
   const switchSurfaceMode = useCallback(
@@ -501,6 +529,7 @@ export function NotePad({
           color={tileColor}
           fontSize={surfaceFontSize}
           renderMarkdown={!errorMessage && tileRenderMarkdown}
+          imageBaseDir={imageBaseDir ?? undefined}
           width="100%"
           className="h-full cursor-default"
           data-surface-mode={surfaceMode}
@@ -641,6 +670,9 @@ export function NotePad({
                     setContent(event.target.value);
                     setStatus("dirty");
                   }}
+                  onPaste={imagePasteHandler}
+                  onDrop={imageDropHandler}
+                  onDragOver={imageDragOverHandler}
                   onKeyDown={(event) => {
                     if (event.key === "ArrowUp") {
                       const ta = contentRef.current;

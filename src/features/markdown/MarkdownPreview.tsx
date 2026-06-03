@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -9,6 +9,7 @@ import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import rehypeSlug from "rehype-slug";
 import type { Pluggable } from "unified";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import type { Components } from "react-markdown";
 import "katex/dist/katex.min.css";
 
@@ -64,6 +65,7 @@ interface MarkdownPreviewProps {
   content: string;
   fontSize?: number;
   renderHtml?: boolean;
+  imageBaseDir?: string;
 }
 
 const remarkPlugins = [remarkGfm, remarkMath];
@@ -85,7 +87,7 @@ const rehypePluginsWithHtml: Pluggable[] = [
   rehypeSlug,
 ];
 
-const components: Components = {
+const staticComponents: Components = {
   h1: ({ children, id }) => (
     <h1 id={id} className="text-[1.57em] font-display font-bold text-ink mt-6 mb-4 tracking-wide">
       {children}
@@ -200,8 +202,30 @@ export function MarkdownPreview({
   content,
   fontSize = 14,
   renderHtml = false,
+  imageBaseDir,
 }: MarkdownPreviewProps) {
   const { t } = useTranslation();
+  const components = useMemo<Components>(
+    () => ({
+      ...staticComponents,
+      img: ({ src, alt, ...props }) => {
+        let resolvedSrc = src ?? "";
+        if (src?.startsWith("images/") && imageBaseDir) {
+          resolvedSrc = convertFileSrc(imageBaseDir + "/" + src);
+        }
+        return (
+          <img
+            src={resolvedSrc}
+            alt={alt ?? ""}
+            loading="lazy"
+            className="w-[50%] rounded my-2 mx-auto block"
+            {...props}
+          />
+        );
+      },
+    }),
+    [imageBaseDir],
+  );
   return (
     <div className="font-body" style={{ fontSize: `${fontSize}px` }}>
       {content.trim() ? (

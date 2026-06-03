@@ -33,6 +33,9 @@ import {
   saveExternalFile,
   updateNote,
 } from "../features/notes/api";
+import { cleanUnusedImages } from "../features/images/api";
+import { useImagePaste } from "../features/images/useImagePaste";
+import { useImageBaseDir } from "../features/images/useImageBaseDir";
 import type { ExternalFile, Note, NoteMetadata } from "../features/notes/types";
 import {
   countNoteChars,
@@ -322,6 +325,7 @@ export function MainWindow({
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const externalFileMtimeRef = useRef<number>(0);
   const lastExternalSaveRef = useRef<number>(0);
+  const imageBaseDir = useImageBaseDir();
   const saveStateRef = useRef(saveState);
   saveStateRef.current = saveState;
   const selectedIdRef = useRef(selectedId);
@@ -1127,6 +1131,53 @@ export function MainWindow({
 
   const markDirty = () => {
     if (selectedId) setSaveState("dirty");
+  };
+
+  const ensureNoteSaved = useCallback(async (): Promise<string | null> => {
+    if (selectedId) return selectedId;
+    try {
+      const note = await createNote({ title, content, category: activeCategory });
+      replaceNoteMetadata(note);
+      applyNote(note);
+      return note.id;
+    } catch {
+      return null;
+    }
+  }, [selectedId, title, content, activeCategory, replaceNoteMetadata, applyNote]);
+
+  const {
+    handlePaste: imagePasteHandler,
+    handleDrop: imageDropHandler,
+    handleDragOver: imageDragOverHandler,
+  } = useImagePaste({
+    noteId: selectedId,
+    textareaRef: contentRef,
+    setContent,
+    markDirty,
+    onEnsureNoteSaved: ensureNoteSaved,
+    disabled: isExternal,
+    onError: setErrorMessage,
+    t,
+  });
+
+  const handleCleanUnusedImages = async () => {
+    if (!selectedId || isExternal) return;
+    try {
+      const removed = await cleanUnusedImages(selectedId, content);
+      if (removed.length > 0) {
+        setErrorMessage(
+          t("main.images.cleaned", {
+            count: removed.length,
+            defaultValue: "已清理 {{count}} 张图片",
+          }),
+        );
+      } else {
+        setErrorMessage(t("main.images.cleanedNone", { defaultValue: "没有需要清理的图片" }));
+      }
+      setTimeout(() => setErrorMessage(null), 3000);
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    }
   };
 
   const handleUndo = () => {
@@ -2195,6 +2246,9 @@ export function MainWindow({
                             setContent(event.target.value);
                             markDirty();
                           }}
+                          onPaste={imagePasteHandler}
+                          onDrop={imageDropHandler}
+                          onDragOver={imageDragOverHandler}
                           className="w-full h-full leading-[1.9] text-ink-soft font-body placeholder:text-ink-ghost/40"
                           style={{
                             fontSize: `${settingsConfig?.fontSize ?? 14}px`,
@@ -2248,6 +2302,7 @@ export function MainWindow({
                           content={content}
                           fontSize={settingsConfig?.fontSize ?? 14}
                           renderHtml={settingsConfig?.renderHtmlMarkdown ?? false}
+                          imageBaseDir={imageBaseDir ?? undefined}
                         />
                       </div>
                     </div>
@@ -2270,6 +2325,18 @@ export function MainWindow({
                 </span>
               </div>
               <div className="flex items-center gap-3">
+                {selectedId && !isExternal && content.includes("images/") && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void handleCleanUnusedImages()}
+                      className="text-[10px] text-ink-ghost hover:text-bamboo font-mono cursor-pointer transition-colors"
+                    >
+                      {t("main.images.cleanUnused", { defaultValue: "清理未使用图片" })}
+                    </button>
+                    <span className="text-[10px] text-ink-ghost/40">|</span>
+                  </>
+                )}
                 <span className="text-[10px] text-ink-ghost font-mono">
                   {t("main.statusBar.encoding", { defaultValue: "UTF-8" })}
                 </span>
