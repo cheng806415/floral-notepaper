@@ -724,8 +724,8 @@ impl UpdateDownloadService {
             }
             None
         } else if !plan.sha256_verification_enabled {
-            eprintln!(
-                "[update] SHA-256 verification is disabled for MirrorChyan source \
+            debug_log!(
+                "SHA-256 verification is disabled for MirrorChyan source \
                  downloads (MirrorChyan API does not provide asset checksums)"
             );
             None

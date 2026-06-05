@@ -663,8 +663,8 @@ fn check_mirror_chyan_api(
     let has_url = mirror_chyan_asset_url.is_some();
     // MirrorChyan API does not provide asset SHA-256 checksums in its response,
     // so hash verification is explicitly disabled for MirrorChyan-sourced downloads.
-    eprintln!(
-        "[update] MirrorChyan API response does not include SHA-256 checksum; \
+    debug_log!(
+        "MirrorChyan API response does not include SHA-256 checksum; \
          verification disabled for MirrorChyan source downloads"
     );
     Ok(ProviderCheck::Available(Box::new(UpdateCandidate {

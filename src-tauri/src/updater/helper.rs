@@ -1,9 +1,11 @@
+#[cfg(target_os = "windows")]
+use super::platform::normalize_windows_path;
 use super::{
+    file_lock::acquire_update_state_lock,
     settings::write_json_atomic,
     types::{InstallKind, UpdateErrorDto, UpdateInstallMode, UpdateStateDto, UpdateStatus},
     UpdatePaths,
 };
-use crate::services::notes::AppError;
 use chrono::Utc;
 use sha2::{Digest, Sha256};
 use std::{
@@ -31,9 +33,6 @@ const WAIT_FOR_REPLACEMENT_TIMEOUT: Duration = Duration::from_secs(30);
 const WATCHDOG_HELPER_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
 const INSTALLER_TIMEOUT: Duration = Duration::from_secs(15 * 60);
-const STATE_LOCK_TIMEOUT: Duration = Duration::from_secs(10);
-const STATE_LOCK_POLL_INTERVAL: Duration = Duration::from_millis(50);
-const STALE_STATE_LOCK_AGE: Duration = Duration::from_secs(5 * 60);
 const UPDATE_STAGE_PREFIX: &str = ".floral-notepaper-update-stage-";
 #[cfg(target_os = "macos")]
 const MOUNT_STAGE_PREFIX: &str = ".floral-notepaper-mounted-dmg-";
@@ -83,16 +82,7 @@ pub struct UpdateHelperCommand {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct AppliedUpdate {
     launch_target: PathBuf,
-    rollback: Option<MacosRollbackPlan>,
-}
-
-impl AppliedUpdate {
-    fn without_rollback(launch_target: PathBuf) -> Self {
-        Self {
-            launch_target,
-            rollback: None,
-        }
-    }
+    rollback: Option<InstallRollbackPlan>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -102,11 +92,29 @@ struct MacosRollbackPlan {
     stage_root: PathBuf,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum InstallRollbackPlan {
+    Macos(MacosRollbackPlan),
+    Windows(WindowsRollbackPlan),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WindowsRollbackPlan {
+    target_path: PathBuf,
+    backup_path: PathBuf,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum WatchdogPostExitAction {
     Noop,
     RelaunchWithoutFailure,
     MarkFailedAndRelaunch,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WindowsInstallerFamily {
+    Msi,
+    Nsis,
 }
 
 impl UpdateHelperCommand {
@@ -146,6 +154,7 @@ pub enum UpdateHelperExitCode {
     Success = 0,
     InvalidArguments = 2,
     AssetMissing = 3,
+    AssetUnreadable = 22,
     AssetSizeMismatch = 4,
     AssetHashMismatch = 5,
     TargetMissing = 6,
@@ -321,46 +330,53 @@ fn execute_apply(
     )?;
     if let Err(code) = wait_for_process_exit(command.wait_pid, &command.target_path, log) {
         let persist_result = persist_failed_state(command, code, log);
+        let completion_result = write_completion_marker(command, log);
         let cleanup_result = cleanup_after_install(command, log);
         persist_result?;
+        completion_result?;
         cleanup_result?;
-        let _ = write_completion_marker(command, log);
         return Err(code);
     }
     let applied_update = match apply_update(command, log) {
         Ok(update) => update,
         Err(code) => {
             let persist_result = persist_failed_state(command, code, log);
-            let cleanup_result = cleanup_after_install(command, log);
             let relaunch_result = relaunch_existing_target(command, log);
+            let completion_result = if relaunch_result.is_ok() {
+                Some(write_completion_marker(command, log))
+            } else {
+                None
+            };
+            let cleanup_result = cleanup_after_install(command, log);
             persist_result?;
+            if let Some(result) = completion_result {
+                result?;
+            }
             cleanup_result?;
             relaunch_result?;
-            let _ = write_completion_marker(command, log);
             return Err(code);
         }
     };
 
     persist_pending_verification_state(command, log)?;
     cleanup_after_install(command, log)?;
-    write_relaunch_marker(command, log)?;
     if let Err(code) = relaunch_target(&applied_update.launch_target, log) {
         let failure_code = if let Some(rollback) = applied_update.rollback.as_ref() {
-            rollback_macos_update(rollback, log).err().unwrap_or(code)
+            rollback_applied_update(rollback, log).err().unwrap_or(code)
         } else {
             code
         };
-        if let Err(error) = remove_relaunch_marker(command) {
-            write_log_line(
-                log,
-                &format!(
-                    "failed to remove relaunch marker {} ({error})",
-                    relaunch_marker_path(command).display()
-                ),
-            )?;
-        }
         persist_failed_state(command, failure_code, log)?;
         return Err(failure_code);
+    }
+    if let Err(error) = write_relaunch_marker(command, log) {
+        let _ = write_log_line(
+            log,
+            &format!(
+                "failed to persist relaunch handoff marker {} ({error:?})",
+                relaunch_marker_path(command).display()
+            ),
+        );
     }
     cleanup_applied_update(&applied_update, log)?;
     write_completion_marker(command, log)
@@ -465,11 +481,11 @@ fn validate_request(
             write_log_line(
                 log,
                 &format!(
-                    "asset missing: failed to read {} ({error})",
+                    "asset unreadable: failed to read {} ({error})",
                     command.asset_path.display()
                 ),
             )?;
-            return Err(UpdateHelperExitCode::AssetMissing);
+            return Err(UpdateHelperExitCode::AssetUnreadable);
         }
     };
 
@@ -494,14 +510,16 @@ fn write_ready_marker(
     if let Some(parent) = command.ready_path.parent() {
         fs::create_dir_all(parent).map_err(|_| UpdateHelperExitCode::StateWriteFailed)?;
     }
-    fs::write(
-        &command.ready_path,
-        format!("ready {}\n", Utc::now().to_rfc3339()),
-    )
-    .map_err(|_| UpdateHelperExitCode::StateWriteFailed)?;
     write_log_line(
         log,
-        &format!("wrote helper ready marker {}", command.ready_path.display()),
+        &format!(
+            "writing helper ready marker {}",
+            command.ready_path.display()
+        ),
+    )?;
+    write_marker_file(
+        &command.ready_path,
+        format!("ready {}\n", Utc::now().to_rfc3339()),
     )?;
     Ok(())
 }
@@ -526,17 +544,16 @@ fn write_completion_marker(
     if let Some(parent) = completion_path.parent() {
         fs::create_dir_all(parent).map_err(|_| UpdateHelperExitCode::StateWriteFailed)?;
     }
-    fs::write(
-        &completion_path,
-        format!("completed {}\n", Utc::now().to_rfc3339()),
-    )
-    .map_err(|_| UpdateHelperExitCode::StateWriteFailed)?;
     write_log_line(
         log,
         &format!(
-            "wrote helper completion marker {}",
+            "writing helper completion marker {}",
             completion_path.display()
         ),
+    )?;
+    write_marker_file(
+        &completion_path,
+        format!("completed {}\n", Utc::now().to_rfc3339()),
     )?;
     Ok(())
 }
@@ -549,20 +566,27 @@ fn write_relaunch_marker(
     if let Some(parent) = relaunch_path.parent() {
         fs::create_dir_all(parent).map_err(|_| UpdateHelperExitCode::StateWriteFailed)?;
     }
-    fs::write(
-        &relaunch_path,
-        format!("relaunching {}\n", Utc::now().to_rfc3339()),
-    )
-    .map_err(|_| UpdateHelperExitCode::StateWriteFailed)?;
     write_log_line(
         log,
-        &format!("wrote helper relaunch marker {}", relaunch_path.display()),
+        &format!("writing helper relaunch marker {}", relaunch_path.display()),
+    )?;
+    write_marker_file(
+        &relaunch_path,
+        format!("relaunching {}\n", Utc::now().to_rfc3339()),
     )?;
     Ok(())
 }
 
-fn remove_relaunch_marker(command: &UpdateHelperCommand) -> Result<(), std::io::Error> {
-    remove_file_if_exists(&relaunch_marker_path(command))
+fn write_marker_file(path: &Path, contents: String) -> Result<(), UpdateHelperExitCode> {
+    let parent = path
+        .parent()
+        .ok_or(UpdateHelperExitCode::StateWriteFailed)?;
+    let temp_path = unique_temp_path(parent, "marker", Some("tmp"));
+    fs::write(&temp_path, contents).map_err(|_| UpdateHelperExitCode::StateWriteFailed)?;
+    fs::rename(&temp_path, path).map_err(|_| {
+        let _ = fs::remove_file(&temp_path);
+        UpdateHelperExitCode::StateWriteFailed
+    })
 }
 
 fn remove_file_if_exists(path: &Path) -> Result<(), std::io::Error> {
@@ -677,7 +701,7 @@ fn install_macos_bundle(
     )?;
     Ok(AppliedUpdate {
         launch_target: command.target_path.clone(),
-        rollback: Some(rollback),
+        rollback: Some(InstallRollbackPlan::Macos(rollback)),
     })
 }
 
@@ -694,6 +718,7 @@ fn install_windows_installer(
     command: &UpdateHelperCommand,
     log: &mut File,
 ) -> Result<AppliedUpdate, UpdateHelperExitCode> {
+    let rollback = prepare_windows_rollback_plan(command, log)?;
     let extension = command
         .asset_path
         .extension()
@@ -751,7 +776,10 @@ fn install_windows_installer(
                         log,
                         &format!("installer exited with status {:?}", status.code()),
                     )?;
-                    return Err(map_installer_exit(status.code()));
+                    return Err(map_installer_exit(
+                        WindowsInstallerFamily::Msi,
+                        status.code().map(|code| code as u32),
+                    ));
                 }
             }
             "exe" => {
@@ -759,7 +787,10 @@ fn install_windows_installer(
                 let exit_code = shell_execute_installer(installer_path, "/S", log)?;
                 if exit_code != 0 {
                     write_log_line(log, &format!("installer exited with code {exit_code}"))?;
-                    return Err(map_installer_exit(Some(exit_code)));
+                    return Err(map_installer_exit(
+                        WindowsInstallerFamily::Nsis,
+                        Some(exit_code),
+                    ));
                 }
             }
             _ => {
@@ -773,22 +804,60 @@ fn install_windows_installer(
                 return Err(UpdateHelperExitCode::AssetExtractFailed);
             }
         }
-        Ok(())
+        let launch_target = resolve_windows_launch_target(&command.target_path, log)?;
+        wait_for_target_to_exist(&launch_target, log)?;
+        verify_windows_installed_version(&launch_target, &command.target_version, log)?;
+        Ok(launch_target)
     })();
 
     if let Some(link) = exe_link.as_ref() {
         let _ = fs::remove_file(link);
     }
-    result?;
-
-    let launch_target = resolve_windows_launch_target(&command.target_path, log);
-    wait_for_target_to_exist(&launch_target, log)?;
-    verify_windows_installed_version(&launch_target, &command.target_version, log)?;
+    let launch_target = match result {
+        Ok(launch_target) => launch_target,
+        Err(code) => {
+            rollback_windows_update(&rollback, log)?;
+            return Err(code);
+        }
+    };
     write_log_line(
         log,
         &format!("installer completed for version {}", command.target_version),
     )?;
-    Ok(AppliedUpdate::without_rollback(launch_target))
+    Ok(AppliedUpdate {
+        launch_target,
+        rollback: Some(InstallRollbackPlan::Windows(rollback)),
+    })
+}
+
+fn prepare_windows_rollback_plan(
+    command: &UpdateHelperCommand,
+    log: &mut File,
+) -> Result<WindowsRollbackPlan, UpdateHelperExitCode> {
+    let backup_parent = command
+        .ready_path
+        .parent()
+        .ok_or(UpdateHelperExitCode::ReplacementFailed)?;
+    let backup_path = unique_temp_path(backup_parent, "windows-rollback", Some("exe"));
+    fs::copy(&command.target_path, &backup_path).map_err(|error| {
+        let _ = write_log_line(
+            log,
+            &format!(
+                "failed to stage Windows rollback backup {} -> {} ({error})",
+                command.target_path.display(),
+                backup_path.display()
+            ),
+        );
+        UpdateHelperExitCode::ReplacementFailed
+    })?;
+    write_log_line(
+        log,
+        &format!("staged Windows rollback backup {}", backup_path.display()),
+    )?;
+    Ok(WindowsRollbackPlan {
+        target_path: command.target_path.clone(),
+        backup_path,
+    })
 }
 
 #[cfg(target_os = "windows")]
@@ -796,10 +865,10 @@ fn shell_execute_installer(
     path: &Path,
     args: &str,
     log: &mut File,
-) -> Result<i32, UpdateHelperExitCode> {
+) -> Result<u32, UpdateHelperExitCode> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::{
-        Foundation::{CloseHandle, WAIT_OBJECT_0},
+        Foundation::{CloseHandle, WAIT_FAILED, WAIT_OBJECT_0, WAIT_TIMEOUT},
         System::Threading::{GetExitCodeProcess, WaitForSingleObject},
         UI::Shell::{
             ShellExecuteExW, SEE_MASK_NOASYNC, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW,
@@ -834,19 +903,40 @@ fn shell_execute_installer(
     let timeout_ms = INSTALLER_TIMEOUT.as_millis() as u32;
     let wait_result = unsafe { WaitForSingleObject(handle, timeout_ms) };
 
-    if wait_result != WAIT_OBJECT_0 {
+    if wait_result == WAIT_FAILED {
+        let error = std::io::Error::last_os_error();
+        unsafe { CloseHandle(handle) };
+        write_log_line(log, &format!("WaitForSingleObject failed: {error}"))?;
+        return Err(UpdateHelperExitCode::InstallerFailed);
+    }
+
+    if wait_result == WAIT_TIMEOUT {
         unsafe { CloseHandle(handle) };
         write_log_line(log, "installer timed out before completion")?;
         return Err(UpdateHelperExitCode::InstallerTimedOut);
     }
 
-    let mut exit_code: u32 = 0;
-    unsafe {
-        GetExitCodeProcess(handle, &mut exit_code);
-        CloseHandle(handle);
+    if wait_result != WAIT_OBJECT_0 {
+        unsafe { CloseHandle(handle) };
+        write_log_line(
+            log,
+            &format!("installer wait returned unexpected status {wait_result:#x}"),
+        )?;
+        return Err(UpdateHelperExitCode::InstallerFailed);
     }
 
-    Ok(exit_code as i32)
+    let mut exit_code: u32 = 0;
+    let read_exit_code = unsafe { GetExitCodeProcess(handle, &mut exit_code) };
+    unsafe {
+        CloseHandle(handle);
+    }
+    if read_exit_code == 0 {
+        let error = std::io::Error::last_os_error();
+        write_log_line(log, &format!("GetExitCodeProcess failed: {error}"))?;
+        return Err(UpdateHelperExitCode::InstallerFailed);
+    }
+
+    Ok(exit_code)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -854,7 +944,7 @@ fn shell_execute_installer(
     _path: &Path,
     _args: &str,
     _log: &mut File,
-) -> Result<i32, UpdateHelperExitCode> {
+) -> Result<u32, UpdateHelperExitCode> {
     Err(UpdateHelperExitCode::UnsupportedInstallKind)
 }
 
@@ -1046,11 +1136,12 @@ fn wait_for_installer_completion(
     }
 }
 
-fn map_installer_exit(code: Option<i32>) -> UpdateHelperExitCode {
-    match code {
-        Some(1602) => UpdateHelperExitCode::InstallerCancelled,
-        Some(1603) => UpdateHelperExitCode::InstallerFatal,
-        Some(1618) => UpdateHelperExitCode::InstallerBusy,
+fn map_installer_exit(family: WindowsInstallerFamily, code: Option<u32>) -> UpdateHelperExitCode {
+    match (family, code) {
+        (WindowsInstallerFamily::Nsis, Some(1)) => UpdateHelperExitCode::InstallerCancelled,
+        (WindowsInstallerFamily::Msi, Some(1602)) => UpdateHelperExitCode::InstallerCancelled,
+        (WindowsInstallerFamily::Msi, Some(1603)) => UpdateHelperExitCode::InstallerFatal,
+        (WindowsInstallerFamily::Msi, Some(1618)) => UpdateHelperExitCode::InstallerBusy,
         _ => UpdateHelperExitCode::InstallerFailed,
     }
 }
@@ -1284,30 +1375,51 @@ fn numeric_version_prefix(version: &str) -> Option<Vec<u64>> {
 }
 
 #[cfg(target_os = "windows")]
-fn resolve_windows_launch_target(target_path: &Path, log: &mut File) -> PathBuf {
+fn resolve_windows_launch_target(
+    target_path: &Path,
+    log: &mut File,
+) -> Result<PathBuf, UpdateHelperExitCode> {
     if target_path.exists() {
-        return target_path.to_path_buf();
+        return Ok(target_path.to_path_buf());
     }
 
     let Some(exe_name) = target_path.file_name().and_then(|value| value.to_str()) else {
-        return target_path.to_path_buf();
+        write_log_line(
+            log,
+            &format!(
+                "unable to resolve Windows launch target for missing path {}",
+                target_path.display()
+            ),
+        )?;
+        return Err(UpdateHelperExitCode::InstallerVersionMismatch);
     };
     let resolved = query_windows_install_target_from_registry(exe_name);
     if let Some(path) = resolved.as_ref() {
-        let _ = write_log_line(
+        write_log_line(
             log,
             &format!(
                 "resolved Windows install target from registry: {}",
                 path.display()
             ),
-        );
+        )?;
+        return Ok(path.clone());
     }
-    resolved.unwrap_or_else(|| target_path.to_path_buf())
+    write_log_line(
+        log,
+        &format!(
+            "install target missing and registry did not resolve a replacement path for {}",
+            target_path.display()
+        ),
+    )?;
+    Err(UpdateHelperExitCode::InstallerVersionMismatch)
 }
 
 #[cfg(not(target_os = "windows"))]
-fn resolve_windows_launch_target(target_path: &Path, _log: &mut File) -> PathBuf {
-    target_path.to_path_buf()
+fn resolve_windows_launch_target(
+    target_path: &Path,
+    _log: &mut File,
+) -> Result<PathBuf, UpdateHelperExitCode> {
+    Ok(target_path.to_path_buf())
 }
 
 #[cfg(target_os = "windows")]
@@ -1446,7 +1558,7 @@ fn available_disk_space(_path: &Path) -> Option<u64> {
 }
 
 #[cfg(target_os = "windows")]
-fn process_is_running(pid: u32, _expected_target_path: Option<&Path>) -> bool {
+fn process_is_running(pid: u32, expected_target_path: Option<&Path>) -> bool {
     use windows_sys::Win32::{
         Foundation::CloseHandle,
         System::Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
@@ -1460,38 +1572,69 @@ fn process_is_running(pid: u32, _expected_target_path: Option<&Path>) -> bool {
         }
         let mut exit_code: u32 = 0;
         let ok = GetExitCodeProcess(handle, &mut exit_code);
+        let path_matches = expected_target_path.is_none_or(|expected| {
+            query_windows_process_image_path(handle)
+                .is_some_and(|actual| windows_paths_match(&actual, expected))
+        });
         CloseHandle(handle);
-        ok != 0 && exit_code == STILL_ACTIVE
+        ok != 0 && exit_code == STILL_ACTIVE && path_matches
     }
 }
 
 #[cfg(target_os = "windows")]
-fn force_terminate_process(pid: u32, log: &mut File) -> bool {
-    let taskkill = std::env::var_os("SystemRoot")
-        .map(PathBuf::from)
-        .map(|root| root.join("System32").join("taskkill.exe"))
-        .filter(|p| p.exists())
-        .unwrap_or_else(|| PathBuf::from(r"C:\Windows\System32\taskkill.exe"));
+fn query_windows_process_image_path(handle: isize) -> Option<PathBuf> {
+    use std::os::windows::ffi::OsStringExt;
+    use windows_sys::Win32::System::Threading::QueryFullProcessImageNameW;
 
-    match Command::new(&taskkill)
-        .args(["/F", "/PID", &pid.to_string()])
-        .output()
-    {
-        Ok(output) => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            if !stdout.trim().is_empty() {
-                let _ = write_log_line(log, &format!("taskkill stdout: {}", stdout.trim()));
-            }
-            if !stderr.trim().is_empty() {
-                let _ = write_log_line(log, &format!("taskkill stderr: {}", stderr.trim()));
-            }
-            output.status.success()
+    let mut buffer = vec![0u16; 32768];
+    let mut length = buffer.len() as u32;
+    let ok = unsafe { QueryFullProcessImageNameW(handle, 0, buffer.as_mut_ptr(), &mut length) };
+    if ok == 0 || length == 0 {
+        return None;
+    }
+    buffer.truncate(length as usize);
+    Some(PathBuf::from(OsString::from_wide(&buffer)))
+}
+
+#[cfg(target_os = "windows")]
+fn windows_paths_match(actual: &Path, expected: &Path) -> bool {
+    let actual = fs::canonicalize(actual).unwrap_or_else(|_| actual.to_path_buf());
+    let expected = fs::canonicalize(expected).unwrap_or_else(|_| expected.to_path_buf());
+    normalize_windows_path(&actual.to_string_lossy())
+        == normalize_windows_path(&expected.to_string_lossy())
+}
+
+#[cfg(target_os = "windows")]
+fn force_terminate_process(pid: u32, log: &mut File) -> bool {
+    use windows_sys::Win32::{
+        Foundation::CloseHandle,
+        System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE},
+    };
+
+    unsafe {
+        let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
+        if handle.is_null() {
+            let _ = write_log_line(
+                log,
+                &format!("failed to open process {pid} for termination"),
+            );
+            return false;
         }
-        Err(error) => {
-            let _ = write_log_line(log, &format!("failed to run taskkill: {error}"));
-            false
+        let terminated = TerminateProcess(handle, 1);
+        let close_result = CloseHandle(handle);
+        if terminated == 0 {
+            let error = std::io::Error::last_os_error();
+            let _ = write_log_line(log, &format!("TerminateProcess failed for {pid}: {error}"));
+            return false;
         }
+        if close_result == 0 {
+            let error = std::io::Error::last_os_error();
+            let _ = write_log_line(
+                log,
+                &format!("CloseHandle failed after terminating process {pid}: {error}"),
+            );
+        }
+        true
     }
 }
 
@@ -1715,15 +1858,41 @@ fn cleanup_applied_update(
     log: &mut File,
 ) -> Result<(), UpdateHelperExitCode> {
     if let Some(rollback) = applied_update.rollback.as_ref() {
-        write_log_line(
-            log,
-            &format!(
-                "retaining macOS rollback backup after relaunch: {}",
-                rollback.stage_root.display()
-            ),
-        )?;
+        match rollback {
+            InstallRollbackPlan::Macos(rollback) => {
+                write_log_line(
+                    log,
+                    &format!(
+                        "retaining macOS rollback backup after relaunch: {}",
+                        rollback.stage_root.display()
+                    ),
+                )?;
+            }
+            InstallRollbackPlan::Windows(rollback) => {
+                remove_file_if_exists(&rollback.backup_path).map_err(|error| {
+                    let _ = write_log_line(
+                        log,
+                        &format!(
+                            "failed to remove Windows rollback backup {} ({error})",
+                            rollback.backup_path.display()
+                        ),
+                    );
+                    UpdateHelperExitCode::CleanupFailed
+                })?;
+            }
+        }
     }
     Ok(())
+}
+
+fn rollback_applied_update(
+    rollback: &InstallRollbackPlan,
+    log: &mut File,
+) -> Result<(), UpdateHelperExitCode> {
+    match rollback {
+        InstallRollbackPlan::Macos(rollback) => rollback_macos_update(rollback, log),
+        InstallRollbackPlan::Windows(rollback) => rollback_windows_update(rollback, log),
+    }
 }
 
 fn rollback_macos_update(
@@ -1740,6 +1909,35 @@ fn rollback_macos_update(
     )?;
     swap_macos_bundles(&rollback.target_path, &rollback.backup_path, log)?;
     cleanup_stage_root(&rollback.stage_root, log)?;
+    Ok(())
+}
+
+fn rollback_windows_update(
+    rollback: &WindowsRollbackPlan,
+    log: &mut File,
+) -> Result<(), UpdateHelperExitCode> {
+    write_log_line(
+        log,
+        &format!(
+            "restoring Windows executable {} from rollback backup {}",
+            rollback.target_path.display(),
+            rollback.backup_path.display()
+        ),
+    )?;
+    if let Some(parent) = rollback.target_path.parent() {
+        fs::create_dir_all(parent).map_err(|_| UpdateHelperExitCode::ReplacementFailed)?;
+    }
+    fs::copy(&rollback.backup_path, &rollback.target_path).map_err(|error| {
+        let _ = write_log_line(
+            log,
+            &format!(
+                "failed to restore Windows executable {} from {} ({error})",
+                rollback.target_path.display(),
+                rollback.backup_path.display()
+            ),
+        );
+        UpdateHelperExitCode::ReplacementFailed
+    })?;
     Ok(())
 }
 
@@ -1906,16 +2104,6 @@ fn find_app_bundles(root: &Path) -> Vec<PathBuf> {
     results
 }
 
-struct HelperStateLock {
-    path: PathBuf,
-}
-
-impl Drop for HelperStateLock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-    }
-}
-
 fn mutate_state_snapshot<F>(
     command: &UpdateHelperCommand,
     log: &mut File,
@@ -1943,62 +2131,20 @@ where
 fn acquire_helper_state_lock(
     state_path: &Path,
     log: &mut File,
-) -> Result<HelperStateLock, UpdateHelperExitCode> {
-    let lock_path = state_path.with_extension("lock");
-    if let Some(parent) = lock_path.parent() {
-        fs::create_dir_all(parent).map_err(|_| UpdateHelperExitCode::StateWriteFailed)?;
-    }
-
-    let deadline = Instant::now() + STATE_LOCK_TIMEOUT;
-    loop {
-        match OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&lock_path)
-        {
-            Ok(mut file) => {
-                writeln!(file, "{} {}", std::process::id(), Utc::now().to_rfc3339())
-                    .map_err(|_| UpdateHelperExitCode::StateWriteFailed)?;
-                return Ok(HelperStateLock { path: lock_path });
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                remove_stale_helper_state_lock(&lock_path);
-                if Instant::now() >= deadline {
-                    let _ = write_log_line(
-                        log,
-                        &format!("timed out waiting for state lock {}", lock_path.display()),
-                    );
-                    return Err(UpdateHelperExitCode::StateWriteFailed);
-                }
-                thread::sleep(STATE_LOCK_POLL_INTERVAL);
-            }
-            Err(error) => {
-                let _ = write_log_line(
-                    log,
-                    &format!(
-                        "failed to acquire state lock {} ({error})",
-                        lock_path.display()
-                    ),
-                );
-                return Err(UpdateHelperExitCode::StateWriteFailed);
-            }
-        }
-    }
-}
-
-fn remove_stale_helper_state_lock(lock_path: &Path) {
-    let Ok(metadata) = fs::metadata(lock_path) else {
-        return;
-    };
-    let Ok(modified) = metadata.modified() else {
-        return;
-    };
-    let Ok(age) = SystemTime::now().duration_since(modified) else {
-        return;
-    };
-    if age >= STALE_STATE_LOCK_AGE {
-        let _ = fs::remove_file(lock_path);
-    }
+) -> Result<super::file_lock::UpdateStateLock, UpdateHelperExitCode> {
+    acquire_update_state_lock(state_path).map_err(|error| {
+        let lock_path = state_path.with_extension("lock");
+        let message = if error.kind() == std::io::ErrorKind::TimedOut {
+            format!("timed out waiting for state lock {}", lock_path.display())
+        } else {
+            format!(
+                "failed to acquire state lock {} ({error})",
+                lock_path.display()
+            )
+        };
+        let _ = write_log_line(log, &message);
+        UpdateHelperExitCode::StateWriteFailed
+    })
 }
 
 fn load_state_snapshot_unlocked(command: &UpdateHelperCommand) -> UpdateStateDto {
@@ -2029,9 +2175,11 @@ fn write_state_snapshot_unlocked(
 }
 
 fn install_error_code(code: UpdateHelperExitCode) -> &'static str {
+    debug_assert_ne!(code, UpdateHelperExitCode::Success);
     match code {
         UpdateHelperExitCode::InvalidArguments => "updateInstallHelperInvalidArguments",
         UpdateHelperExitCode::AssetMissing => "updateInstallAssetMissing",
+        UpdateHelperExitCode::AssetUnreadable => "updateInstallAssetUnreadable",
         UpdateHelperExitCode::AssetSizeMismatch => "updateInstallAssetSizeMismatch",
         UpdateHelperExitCode::AssetHashMismatch => "updateInstallAssetHashMismatch",
         UpdateHelperExitCode::TargetMissing => "updateInstallTargetMissing",
@@ -2050,14 +2198,16 @@ fn install_error_code(code: UpdateHelperExitCode) -> &'static str {
         UpdateHelperExitCode::InstallerFatal => "updateInstallInstallerFatal",
         UpdateHelperExitCode::InstallerVersionMismatch => "updateInstallVersionMismatch",
         UpdateHelperExitCode::CleanupFailed => "updateInstallCleanupFailed",
-        UpdateHelperExitCode::Success => "updateInstallHelperFailed",
+        UpdateHelperExitCode::Success => "updateInstallCompleted",
     }
 }
 
 fn install_error_message(code: UpdateHelperExitCode) -> &'static str {
+    debug_assert_ne!(code, UpdateHelperExitCode::Success);
     match code {
         UpdateHelperExitCode::InvalidArguments => "更新安装助手参数无效",
         UpdateHelperExitCode::AssetMissing => "更新包文件不存在或无法读取",
+        UpdateHelperExitCode::AssetUnreadable => "更新包文件存在但无法读取",
         UpdateHelperExitCode::AssetSizeMismatch => "更新包大小校验失败",
         UpdateHelperExitCode::AssetHashMismatch => "更新包哈希校验失败",
         UpdateHelperExitCode::TargetMissing => "当前安装目标不存在，无法继续",
@@ -2076,13 +2226,14 @@ fn install_error_message(code: UpdateHelperExitCode) -> &'static str {
         UpdateHelperExitCode::InstallerFatal => "更新安装程序返回了致命错误",
         UpdateHelperExitCode::InstallerVersionMismatch => "安装完成后版本校验失败",
         UpdateHelperExitCode::CleanupFailed => "安装后清理临时文件失败",
-        UpdateHelperExitCode::Success => "更新安装助手执行失败",
+        UpdateHelperExitCode::Success => "更新安装助手已完成",
     }
 }
 
 fn install_error_action(code: UpdateHelperExitCode) -> &'static str {
     match code {
         UpdateHelperExitCode::AssetMissing
+        | UpdateHelperExitCode::AssetUnreadable
         | UpdateHelperExitCode::AssetSizeMismatch
         | UpdateHelperExitCode::AssetHashMismatch
         | UpdateHelperExitCode::AssetExtractFailed => "retryDownload",
@@ -2296,25 +2447,20 @@ fn sha256_hex(path: &Path) -> Result<String, std::io::Error> {
 }
 
 fn nibble_to_hex(value: u8) -> char {
+    debug_assert!(value <= 0x0f);
     match value {
         0..=9 => (b'0' + value) as char,
         10..=15 => (b'a' + (value - 10)) as char,
-        _ => '0',
+        _ => unreachable!("nibble_to_hex only accepts 4-bit values"),
     }
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn cleanup_stale_macos_mounts(_paths: &UpdatePaths) -> Result<(), AppError> {
+pub(crate) fn cleanup_stale_macos_mounts(_paths: &UpdatePaths) {
     let temp_dir = std::env::temp_dir();
     let entries = match fs::read_dir(&temp_dir) {
         Ok(entries) => entries,
-        Err(error) => {
-            return Err(AppError {
-                code: "updateInstallCleanupFailed".into(),
-                message: error.to_string(),
-                details: Default::default(),
-            });
-        }
+        Err(_) => return,
     };
 
     for entry in entries.flatten() {
@@ -2331,14 +2477,10 @@ pub(crate) fn cleanup_stale_macos_mounts(_paths: &UpdatePaths) -> Result<(), App
             .status();
         let _ = fs::remove_dir_all(&path);
     }
-
-    Ok(())
 }
 
 #[cfg(not(target_os = "macos"))]
-pub(crate) fn cleanup_stale_macos_mounts(_paths: &UpdatePaths) -> Result<(), AppError> {
-    Ok(())
-}
+pub(crate) fn cleanup_stale_macos_mounts(_paths: &UpdatePaths) {}
 
 #[cfg(test)]
 mod tests {
@@ -2346,16 +2488,34 @@ mod tests {
     #[cfg(unix)]
     use std::os::unix::fs::symlink;
 
-    fn temp_dir(name: &str) -> PathBuf {
+    struct TestDir {
+        path: PathBuf,
+    }
+
+    impl std::ops::Deref for TestDir {
+        type Target = Path;
+
+        fn deref(&self) -> &Self::Target {
+            self.path.as_path()
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn temp_dir(name: &str) -> TestDir {
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        let root = std::env::temp_dir()
+        let path = std::env::temp_dir()
             .join("floral-notepaper-updater-tests")
             .join(format!("{name}-{unique}"));
-        fs::create_dir_all(&root).expect("create temp dir");
-        root
+        fs::create_dir_all(&path).expect("create temp dir");
+        TestDir { path }
     }
 
     fn helper_command(root: &Path) -> UpdateHelperCommand {
@@ -2487,6 +2647,7 @@ mod tests {
         assert_eq!(exit_code, UpdateHelperExitCode::TargetMissing);
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn runs_extensionless_asset_as_exe_for_nsis_install() {
         let root = temp_dir("helper-windows-installer-no-extension");
@@ -2529,6 +2690,18 @@ mod tests {
         assert_eq!(
             install_error_action(UpdateHelperExitCode::InstallerVersionMismatch),
             "retryInstall"
+        );
+    }
+
+    #[test]
+    fn maps_nsis_cancel_exit_to_cancelled() {
+        assert_eq!(
+            map_installer_exit(WindowsInstallerFamily::Nsis, Some(1)),
+            UpdateHelperExitCode::InstallerCancelled
+        );
+        assert_eq!(
+            map_installer_exit(WindowsInstallerFamily::Nsis, Some(2)),
+            UpdateHelperExitCode::InstallerFailed
         );
     }
 
@@ -2716,17 +2889,38 @@ mod tests {
         fs::create_dir_all(&backup_path).expect("create rollback backup");
         let applied_update = AppliedUpdate {
             launch_target: root.join("target.app"),
-            rollback: Some(MacosRollbackPlan {
+            rollback: Some(InstallRollbackPlan::Macos(MacosRollbackPlan {
                 target_path: root.join("target.app"),
                 backup_path,
                 stage_root: stage_root.clone(),
-            }),
+            })),
         };
         let mut log = open_log(&root.join("cleanup.log")).expect("open log");
 
         cleanup_applied_update(&applied_update, &mut log).expect("cleanup applied update");
 
         assert!(stage_root.exists());
+    }
+
+    #[test]
+    fn rollback_windows_update_restores_original_executable() {
+        let root = temp_dir("helper-windows-rollback");
+        let target_path = root.join("floral-notepaper.exe");
+        let backup_path = root.join("rollback.exe");
+        fs::write(&target_path, b"new version").expect("write target");
+        fs::write(&backup_path, b"old version").expect("write backup");
+        let rollback = WindowsRollbackPlan {
+            target_path: target_path.clone(),
+            backup_path,
+        };
+        let mut log = open_log(&root.join("rollback.log")).expect("open log");
+
+        rollback_windows_update(&rollback, &mut log).expect("restore backup");
+
+        assert_eq!(
+            fs::read(&target_path).expect("read restored target"),
+            b"old version"
+        );
     }
 
     #[test]

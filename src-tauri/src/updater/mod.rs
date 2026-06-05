@@ -3,6 +3,7 @@ pub mod check;
 pub mod commands;
 pub mod download;
 pub mod errors;
+mod file_lock;
 pub mod helper;
 pub mod install;
 pub mod manifest;
@@ -36,7 +37,6 @@ pub enum UpdateTaskKind {
     Install,
 }
 
-const STAGING_RETENTION: Duration = Duration::from_secs(24 * 60 * 60);
 const DOWNLOAD_RETENTION: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 const MAX_INSTALL_LOGS: usize = 20;
 
@@ -176,7 +176,7 @@ impl UpdaterState {
             state::recover_with_current_version(&self.paths, &self.current_version)?;
         download::cleanup_partial_downloads(&self.paths)?;
         cleanup_update_artifacts(&self.paths, &recovered_state)?;
-        let _ = helper::cleanup_stale_macos_mounts(&self.paths);
+        helper::cleanup_stale_macos_mounts(&self.paths);
         Ok(())
     }
 
@@ -460,7 +460,7 @@ fn cleanup_update_artifacts(
 }
 
 fn cleanup_staging_entries(paths: &UpdatePaths) -> Result<(), AppError> {
-    prune_dir_entries(&paths.staging_dir(), STAGING_RETENTION, |_| true)
+    prune_dir_entries(&paths.staging_dir(), Duration::ZERO, |_| true)
 }
 
 fn cleanup_download_entries(

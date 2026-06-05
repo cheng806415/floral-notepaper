@@ -1,4 +1,5 @@
 use super::{
+    file_lock::acquire_update_state_lock,
     settings::{rename_corrupt_file, write_json_atomic},
     types::{UpdateErrorDto, UpdateStateDto, UpdateStatus},
     version, UpdatePaths,
@@ -6,16 +7,11 @@ use super::{
 use crate::services::notes::AppError;
 use sha2::{Digest, Sha256};
 use std::{
-    fs::{self, File, OpenOptions},
-    io::{BufReader, Read, Write},
+    fs::{self, File},
+    io,
+    io::{BufReader, Read},
     path::Path,
-    thread,
-    time::{Duration, Instant},
 };
-
-const STATE_LOCK_TIMEOUT: Duration = Duration::from_secs(10);
-const STATE_LOCK_POLL_INTERVAL: Duration = Duration::from_millis(50);
-const STALE_STATE_LOCK_AGE: Duration = Duration::from_secs(5 * 60);
 
 #[cfg(test)]
 pub fn load(paths: &UpdatePaths) -> Result<UpdateStateDto, AppError> {
@@ -26,7 +22,7 @@ pub fn load_with_current_version(
     paths: &UpdatePaths,
     current_version: &str,
 ) -> Result<UpdateStateDto, AppError> {
-    let _lock = acquire_state_file_lock(&paths.state_path())?;
+    let _lock = acquire_update_state_lock(&paths.state_path()).map_err(map_state_lock_error)?;
     load_with_current_version_unlocked(paths, current_version)
 }
 
@@ -90,7 +86,7 @@ fn normalize_state(mut state: UpdateStateDto, current_version: &str) -> UpdateSt
 }
 
 pub fn save(paths: &UpdatePaths, state: &UpdateStateDto) -> Result<(), AppError> {
-    let _lock = acquire_state_file_lock(&paths.state_path())?;
+    let _lock = acquire_update_state_lock(&paths.state_path()).map_err(map_state_lock_error)?;
     save_unlocked(paths, state)
 }
 
@@ -117,7 +113,7 @@ pub fn recover_with_current_version(
     paths: &UpdatePaths,
     current_version: &str,
 ) -> Result<UpdateStateDto, AppError> {
-    let _lock = acquire_state_file_lock(&paths.state_path())?;
+    let _lock = acquire_update_state_lock(&paths.state_path()).map_err(map_state_lock_error)?;
     let mut state = load_with_current_version_unlocked(paths, current_version)?;
 
     match state.status {
@@ -187,67 +183,15 @@ pub fn recover_with_current_version(
     Ok(state)
 }
 
-struct StateFileLock {
-    path: std::path::PathBuf,
-}
-
-impl Drop for StateFileLock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
+fn map_state_lock_error(error: io::Error) -> AppError {
+    if error.kind() == io::ErrorKind::TimedOut {
+        return AppError {
+            code: "updateStateLockTimeout".into(),
+            message: "等待更新状态文件锁超时".into(),
+            details: Default::default(),
+        };
     }
-}
-
-fn acquire_state_file_lock(state_path: &Path) -> Result<StateFileLock, AppError> {
-    let lock_path = state_path.with_extension("lock");
-    if let Some(parent) = lock_path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-
-    let deadline = Instant::now() + STATE_LOCK_TIMEOUT;
-    loop {
-        match OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&lock_path)
-        {
-            Ok(mut file) => {
-                writeln!(
-                    file,
-                    "{} {}",
-                    std::process::id(),
-                    chrono::Utc::now().to_rfc3339()
-                )?;
-                return Ok(StateFileLock { path: lock_path });
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                remove_stale_state_lock(&lock_path);
-                if Instant::now() >= deadline {
-                    return Err(AppError {
-                        code: "updateStateLockTimeout".into(),
-                        message: "等待更新状态文件锁超时".into(),
-                        details: Default::default(),
-                    });
-                }
-                thread::sleep(STATE_LOCK_POLL_INTERVAL);
-            }
-            Err(error) => return Err(error.into()),
-        }
-    }
-}
-
-fn remove_stale_state_lock(lock_path: &Path) {
-    let Ok(metadata) = fs::metadata(lock_path) else {
-        return;
-    };
-    let Ok(modified) = metadata.modified() else {
-        return;
-    };
-    let Ok(age) = std::time::SystemTime::now().duration_since(modified) else {
-        return;
-    };
-    if age >= STALE_STATE_LOCK_AGE {
-        let _ = fs::remove_file(lock_path);
-    }
+    error.into()
 }
 
 fn installed_version_matches_target(state: &UpdateStateDto, current_version: &str) -> bool {

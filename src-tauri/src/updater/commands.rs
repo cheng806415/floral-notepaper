@@ -15,9 +15,9 @@ use crate::services::notes::AppError;
 use chrono::Utc;
 
 macro_rules! debug_log {
-    ($($arg:tt)*) => {{
+    ($label:literal, $($arg:tt)*) => {{
         if cfg!(debug_assertions) {
-            eprintln!("[update:check] {}", format!($($arg)*));
+            eprintln!("[update:{}] {}", $label, format!($($arg)*));
         }
     }};
 }
@@ -90,14 +90,14 @@ pub async fn update_check(
     state: State<'_, UpdaterState>,
     manual: bool,
 ) -> Result<UpdateCheckResult, AppError> {
-    debug_log!("收到检查请求 manual={manual}");
+    debug_log!("check", "收到检查请求 manual={manual}");
     let task = state.begin_task(UpdateTaskKind::Check)?;
     let paths = state.paths().clone();
     let result_paths = paths.clone();
     let current_version = state.current_version().to_string();
     let emit_version = current_version.clone();
     let cdk = state.get_mirror_chyan_cdk();
-    debug_log!("CDK 已加载 has_cdk={}", cdk.is_some());
+    debug_log!("check", "CDK 已加载 has_cdk={}", cdk.is_some());
 
     let prepare_paths = paths.clone();
     let prepare_version = current_version.clone();
@@ -111,7 +111,7 @@ pub async fn update_check(
             format!("准备检查更新任务失败：{error}"),
         )
     })??;
-    debug_log!("发出 update://checking");
+    debug_log!("check", "发出 update://checking");
     app.emit_checking(&checking_state);
 
     let result = async_runtime::spawn_blocking(move || {
@@ -328,6 +328,7 @@ trait UpdateCheckEmitter {
 impl UpdateCheckEmitter for tauri::AppHandle {
     fn emit_checking(&self, state: &UpdateStateDto) {
         debug_log!(
+            "check",
             "emit update://checking current_version={}",
             state.current_version
         );
@@ -338,6 +339,7 @@ impl UpdateCheckEmitter for tauri::AppHandle {
 
     fn emit_checked(&self, state: &UpdateStateDto) {
         debug_log!(
+            "check",
             "emit update://checked status={:?} latest_version={:?}",
             state.status,
             state.latest_version
@@ -349,6 +351,7 @@ impl UpdateCheckEmitter for tauri::AppHandle {
 
     fn emit_error(&self, error: &UpdateErrorDto) {
         debug_log!(
+            "check",
             "emit update://error code={} message={}",
             error.code,
             error.message
@@ -533,7 +536,11 @@ fn finalize_update_check<E: UpdateCheckEmitter>(
     result: Result<UpdateCheckResult, AppError>,
 ) -> Result<UpdateCheckResult, AppError> {
     if let Ok(next_state) = super::state::load_with_current_version(paths, current_version) {
-        debug_log!("发出 update://checked status={:?}", next_state.status);
+        debug_log!(
+            "check",
+            "发出 update://checked status={:?}",
+            next_state.status
+        );
         emitter.emit_checked(&next_state);
     }
 
@@ -551,7 +558,7 @@ fn finalize_update_check<E: UpdateCheckEmitter>(
                     )
                 });
             if manual {
-                debug_log!("发出 update://error code={}", error_payload.code);
+                debug_log!("check", "发出 update://error code={}", error_payload.code);
                 emitter.emit_error(&error_payload);
             }
             Err(error)
@@ -577,7 +584,7 @@ fn force_terminate_self() -> ! {
             windows_sys::Win32::System::Threading::GetCurrentProcess(),
             0,
         );
-        std::hint::unreachable_unchecked();
+        std::process::abort();
     }
     #[cfg(not(target_os = "windows"))]
     std::process::exit(0);

@@ -220,7 +220,7 @@ fn registry_output_matches_installation(
 }
 
 #[cfg(target_os = "windows")]
-fn normalize_windows_path(value: &str) -> String {
+pub(crate) fn normalize_windows_path(value: &str) -> String {
     value.replace('/', "\\").to_ascii_lowercase()
 }
 
