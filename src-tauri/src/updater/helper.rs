@@ -112,6 +112,20 @@ struct WindowsRollbackPlan {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+struct PreparedWindowsInstaller {
+    installer_path: PathBuf,
+    temp_link: Option<PathBuf>,
+}
+
+impl PreparedWindowsInstaller {
+    fn cleanup(self) {
+        if let Some(link) = self.temp_link {
+            let _ = fs::remove_file(link);
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct WindowsRegistryRollbackPlan {
     key_path: String,
     backup_path: PathBuf,
@@ -832,43 +846,9 @@ fn install_windows_installer(
     log: &mut File,
 ) -> Result<AppliedUpdate, UpdateHelperExitCode> {
     let rollback = prepare_windows_rollback_plan(command, log)?;
-    let extension = command
-        .asset_path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-
-    let exe_link = if extension.is_empty() || !matches!(extension.as_str(), "exe" | "msi") {
-        let link_path = command.asset_path.with_extension("exe");
-        let link_result = fs::hard_link(&command.asset_path, &link_path).or_else(|link_error| {
-            fs::copy(&command.asset_path, &link_path)
-                .map(|_| ())
-                .map_err(|copy_error| (link_error, copy_error))
-        });
-        if let Err((link_error, copy_error)) = link_result {
-            let code = map_copy_error_code(&copy_error, UpdateHelperExitCode::AssetExtractFailed);
-            write_log_line(
-                log,
-                &format!(
-                    "failed to create .exe link for extensionless asset: hard_link={link_error}; copy={copy_error}"
-                ),
-            )?;
-            return Err(code);
-        }
-        write_log_line(
-            log,
-            &format!(
-                "created .exe link for extensionless asset: {}",
-                link_path.display()
-            ),
-        )?;
-        Some(link_path)
-    } else {
-        None
-    };
-    let installer_path = exe_link.as_deref().unwrap_or(&command.asset_path);
-    let effective_extension = installer_path
+    let prepared_installer = prepare_windows_installer_asset(command, log)?;
+    let effective_extension = prepared_installer
+        .installer_path
         .extension()
         .and_then(|ext| ext.to_str())
         .unwrap_or_default()
@@ -881,7 +861,7 @@ fn install_windows_installer(
                 let mut child = Command::new("msiexec.exe")
                     .args([
                         "/i",
-                        &installer_path.to_string_lossy(),
+                        &prepared_installer.installer_path.to_string_lossy(),
                         "/passive",
                         "/norestart",
                     ])
@@ -903,7 +883,8 @@ fn install_windows_installer(
             }
             "exe" => {
                 write_log_line(log, "launching Windows NSIS installer")?;
-                let exit_code = shell_execute_installer(installer_path, "/S", log)?;
+                let exit_code =
+                    shell_execute_installer(&prepared_installer.installer_path, "/S", log)?;
                 if exit_code != 0 {
                     write_log_line(log, &format!("installer exited with code {exit_code}"))?;
                     return Err(map_installer_exit(
@@ -917,7 +898,7 @@ fn install_windows_installer(
                     log,
                     &format!(
                         "unsupported Windows installer asset format: {}",
-                        installer_path.display()
+                        prepared_installer.installer_path.display()
                     ),
                 )?;
                 return Err(UpdateHelperExitCode::AssetExtractFailed);
@@ -929,9 +910,7 @@ fn install_windows_installer(
         Ok(launch_target)
     })();
 
-    if let Some(link) = exe_link.as_ref() {
-        let _ = fs::remove_file(link);
-    }
+    prepared_installer.cleanup();
     let launch_target = match result {
         Ok(launch_target) => launch_target,
         Err(code) => {
@@ -946,6 +925,53 @@ fn install_windows_installer(
     Ok(AppliedUpdate {
         launch_target,
         rollback: Some(InstallRollbackPlan::Windows(rollback)),
+    })
+}
+
+fn prepare_windows_installer_asset(
+    command: &UpdateHelperCommand,
+    log: &mut File,
+) -> Result<PreparedWindowsInstaller, UpdateHelperExitCode> {
+    let extension = command
+        .asset_path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    if !extension.is_empty() && matches!(extension.as_str(), "exe" | "msi") {
+        return Ok(PreparedWindowsInstaller {
+            installer_path: command.asset_path.clone(),
+            temp_link: None,
+        });
+    }
+
+    let link_path = command.asset_path.with_extension("exe");
+    let link_result = fs::hard_link(&command.asset_path, &link_path).or_else(|link_error| {
+        fs::copy(&command.asset_path, &link_path)
+            .map(|_| ())
+            .map_err(|copy_error| (link_error, copy_error))
+    });
+    if let Err((link_error, copy_error)) = link_result {
+        let code = map_copy_error_code(&copy_error, UpdateHelperExitCode::AssetExtractFailed);
+        write_log_line(
+            log,
+            &format!(
+                "failed to create .exe link for extensionless asset: hard_link={link_error}; copy={copy_error}"
+            ),
+        )?;
+        return Err(code);
+    }
+    write_log_line(
+        log,
+        &format!(
+            "created .exe link for extensionless asset: {}",
+            link_path.display()
+        ),
+    )?;
+    Ok(PreparedWindowsInstaller {
+        installer_path: link_path.clone(),
+        temp_link: Some(link_path),
     })
 }
 
@@ -3485,10 +3511,20 @@ mod tests {
         command.asset_sha256 = sha256_hex(&command.asset_path).expect("hash installer");
         let mut log = open_log(&root.join("windows-installer.log")).expect("open log");
 
-        let exit_code =
-            install_windows_installer(&command, &mut log).expect_err("fake exe should fail");
+        let prepared =
+            prepare_windows_installer_asset(&command, &mut log).expect("prepare fake installer");
 
-        assert_eq!(exit_code, UpdateHelperExitCode::InstallerFailed);
+        assert_eq!(
+            prepared.installer_path,
+            command.asset_path.with_extension("exe")
+        );
+        assert!(
+            prepared.installer_path.exists(),
+            "temporary .exe link should exist"
+        );
+
+        prepared.cleanup();
+
         assert!(
             !command.asset_path.with_extension("exe").exists(),
             "temporary .exe link should be cleaned up"
