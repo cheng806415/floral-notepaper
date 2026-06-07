@@ -5,8 +5,6 @@ import { useTranslation } from "react-i18next";
 import { createNote, getErrorMessage, getNote, listNotes, updateNote } from "../features/notes/api";
 import { useImagePaste } from "../features/images/useImagePaste";
 import { useImageBaseDir } from "../features/images/useImageBaseDir";
-import { reportInstallPreparation } from "../features/update/api";
-import type { UpdateInstallPrepareRequest } from "../features/update/types";
 import { showToast } from "./Toast";
 import type { Note, NoteMetadata } from "../features/notes/types";
 import {
@@ -52,6 +50,7 @@ import {
   tileSurfaceModeUnpinNoteId,
 } from "../features/windows/tileWindowEvents";
 import { Tile } from "./Tile";
+import { TrafficLights } from "./TrafficLights";
 
 type OpenMode = "new" | "open";
 type NotePadStatus = "empty" | "opened" | "saved" | "dirty" | "saveFailed" | "copied";
@@ -320,44 +319,6 @@ export function NotePad({
     return note;
   }, [content, editingNoteId, title]);
 
-  useEffect(() => {
-    const unlisten = listen<UpdateInstallPrepareRequest>("update://prepare-install", (event) => {
-      const respond = async () => {
-        const windowLabel = windowLabelRef.current || "notepad";
-        if (statusRef.current !== "dirty") {
-          await reportInstallPreparation(event.payload.requestId, windowLabel, "ready");
-          return;
-        }
-
-        try {
-          await saveNote();
-          await reportInstallPreparation(event.payload.requestId, windowLabel, "ready");
-        } catch (error) {
-          setStatus("saveFailed");
-          showToast(getErrorMessage(error));
-          await reportInstallPreparation(
-            event.payload.requestId,
-            windowLabel,
-            "failed",
-            getErrorMessage(error),
-          );
-        }
-      };
-
-      void respond().catch(async (error) => {
-        await reportInstallPreparation(
-          event.payload.requestId,
-          windowLabelRef.current || "notepad",
-          "failed",
-          getErrorMessage(error),
-        ).catch(() => undefined);
-      });
-    });
-    return () => {
-      void unlisten.then((fn) => fn());
-    };
-  }, [saveNote]);
-
   const hasDraftContent = useCallback(
     () => Boolean(editingNoteId || title.trim() || content.trim()),
     [content, editingNoteId, title],
@@ -601,10 +562,12 @@ export function NotePad({
         <div className={padSurfaceClassName} data-surface-mode={surfaceMode}>
           <>
             <div
-              className="flex items-center justify-between px-4 pt-3 pb-0 cursor-default"
+              className="flex items-center justify-between pl-2 pr-3 pt-2 pb-0 cursor-default"
               onMouseDown={handleDrag}
             >
-              <div className="flex items-center gap-0.5">
+              <div className="flex items-center gap-2">
+                <TrafficLights size={11} withTooltips={false} onClose={() => void handleClose()} />
+                <div className="w-px h-4 bg-paper-deep/30 mx-0.5" />
                 <button
                   onClick={resetDraft}
                   className={`relative px-3.5 py-1.5 text-[13px] rounded-t-lg transition-all duration-200 cursor-pointer ${
@@ -651,24 +614,6 @@ export function NotePad({
                   >
                     <path d="M12 17v5" />
                     <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1 1 1 0 0 1 1 1z" />
-                  </svg>
-                </button>
-
-                <button
-                  onClick={() => void handleClose()}
-                  className="group w-7 h-7 flex items-center justify-center rounded-lg text-ink-ghost hover:bg-danger-bg hover:text-red-400 transition-all duration-200 cursor-pointer"
-                  title={t("notepad.tooltip.close", { defaultValue: "关闭" })}
-                >
-                  <svg
-                    width="13"
-                    height="13"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                  >
-                    <path d="M18 6L6 18M6 6l12 12" />
                   </svg>
                 </button>
               </div>
