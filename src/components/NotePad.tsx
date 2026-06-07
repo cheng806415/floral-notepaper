@@ -68,19 +68,14 @@ const surfaceResizeHandles: Array<{
   size: string;
 }> = [
   {
-    direction: "NorthWest",
-    size: "w-8 h-8",
-    className: "top-0 left-0 cursor-nwse-resize",
+    direction: "East",
+    size: "w-2 h-full",
+    className: "top-0 right-0 cursor-ew-resize",
   },
   {
-    direction: "NorthEast",
-    size: "w-5 h-5",
-    className: "top-0 right-0 cursor-nesw-resize",
-  },
-  {
-    direction: "SouthWest",
-    size: "w-8 h-8",
-    className: "bottom-0 left-0 cursor-nesw-resize",
+    direction: "South",
+    size: "w-full h-2",
+    className: "bottom-0 left-0 cursor-ns-resize",
   },
   {
     direction: "SouthEast",
