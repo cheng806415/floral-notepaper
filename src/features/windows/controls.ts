@@ -3,7 +3,13 @@ import { PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { WindowBounds } from "./api";
 
-export type ResizeDirection = "NorthWest" | "NorthEast" | "SouthWest" | "SouthEast";
+export type ResizeDirection =
+  | "NorthWest"
+  | "NorthEast"
+  | "SouthWest"
+  | "SouthEast"
+  | "East"
+  | "South";
 
 export async function showCurrentWindow(): Promise<void> {
   const window = getCurrentWindow();
