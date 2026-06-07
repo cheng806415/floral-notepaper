@@ -40,12 +40,19 @@ fs.writeFileSync(tauriConfigPath, `${JSON.stringify(tauriConfig, null, 2)}\n`);
 const cargoToml = fs.readFileSync(cargoTomlPath, "utf8");
 const nextCargoToml = cargoToml.replace(/^version = "[^"]*"/m, `version = "${version}"`);
 if (nextCargoToml === cargoToml) {
-  console.error(
-    `Failed to update version in src-tauri/Cargo.toml. cwd=${process.cwd()} path=${cargoTomlPath} len=${cargoToml.length} first100=${JSON.stringify(cargoToml.slice(0, 100))}`,
-  );
-  process.exit(1);
+  // Version might already be up-to-date; verify by checking the actual value.
+  const currentMatch = cargoToml.match(/^version = "([^"]*)"/m);
+  if (currentMatch && currentMatch[1] === version) {
+    console.log(`src-tauri/Cargo.toml already has version ${version}, skipping.`);
+  } else {
+    console.error(
+      `Failed to update version in src-tauri/Cargo.toml. cwd=${process.cwd()} path=${cargoTomlPath} len=${cargoToml.length} first100=${JSON.stringify(cargoToml.slice(0, 100))}`,
+    );
+    process.exit(1);
+  }
+} else {
+  fs.writeFileSync(cargoTomlPath, nextCargoToml);
 }
-fs.writeFileSync(cargoTomlPath, nextCargoToml);
 
 console.log(
   `Synced package.json, src-tauri/tauri.conf.json, and src-tauri/Cargo.toml to ${version}.`,
