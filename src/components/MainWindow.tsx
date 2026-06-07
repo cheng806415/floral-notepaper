@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
-import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AboutPanel } from "./AboutPanel";
 import { exportMarkdownNote, importMarkdownNote } from "../features/importExport/api";
@@ -16,22 +16,10 @@ import {
 } from "../features/settings/api";
 import type { AppConfig, ViewMode } from "../features/settings/types";
 import { normalizeTileColor } from "../features/settings/tileColor";
-import { getUpdateStatus, reportInstallPreparation } from "../features/update/api";
-import {
-  ABOUT_UPDATE_LABEL_DURATION_MS,
-  applyAboutUpdateStatus,
-  createAboutUpdateReminderState,
-  dismissAboutUpdateReminderText,
-  type AboutUpdateReminderState,
-} from "../features/update/presentation";
-import type {
-  UpdateErrorPayload,
-  UpdateInstallPrepareRequest,
-  UpdateState,
-} from "../features/update/types";
 import { BackgroundLayer } from "./BackgroundLayer";
 import { SettingsPanel } from "./SettingsPanel";
 import { SlidingButtonGroup } from "./SlidingButtonGroup";
+import { TrafficLights } from "./TrafficLights";
 import {
   createNote,
   createCategory,
@@ -68,8 +56,6 @@ import {
 } from "../features/notes/noteContextMenu";
 import { openNotepadWindow, takeStartupFile, toggleTileWindow } from "../features/windows/api";
 import {
-  closeCurrentWindow,
-  minimizeCurrentWindow,
   toggleMaximizeCurrentWindow,
   isCurrentWindowMaximized,
   startCurrentWindowDrag,
@@ -316,9 +302,6 @@ export function MainWindow({
   const [sidePanelContentVisible, setSidePanelContentVisible] = useState(
     Boolean(initialSettingsOpen && initialConfig),
   );
-  const [aboutUpdateReminder, setAboutUpdateReminder] = useState<AboutUpdateReminderState>(() =>
-    createAboutUpdateReminderState(null),
-  );
   const [settingsConfig, setSettingsConfig] = useState<AppConfig | null>(initialConfig ?? null);
   const [savedNotesDir, setSavedNotesDir] = useState<string | null>(
     initialConfig?.notesDir ?? null,
@@ -366,7 +349,6 @@ export function MainWindow({
     () => externalFiles.find((f) => f.id === selectedId) ?? null,
     [externalFiles, selectedId],
   );
-  const updateStatusHydratedRef = useRef(false);
 
   const isExternal = selectedExternalFile !== null;
 
@@ -469,18 +451,6 @@ export function MainWindow({
     ],
     [t],
   );
-  const syncUpdateStatus = useCallback((nextStatus: UpdateState) => {
-    const shouldHydrate = !updateStatusHydratedRef.current;
-    if (shouldHydrate) {
-      updateStatusHydratedRef.current = true;
-    }
-
-    setAboutUpdateReminder((current) =>
-      shouldHydrate
-        ? createAboutUpdateReminderState(nextStatus)
-        : applyAboutUpdateStatus(current, nextStatus),
-    );
-  }, []);
   const visibleSidePanel: SidePanelMode | null = aboutOpen
     ? "about"
     : settingsOpen && settingsConfig
@@ -490,7 +460,6 @@ export function MainWindow({
   const openAboutPanel = useCallback(() => {
     setSettingsOpen(false);
     setAboutOpen(true);
-    setAboutUpdateReminder((current) => dismissAboutUpdateReminderText(current));
   }, []);
 
   const filteredNotes = useMemo(() => filterNotes(notes, searchQuery), [notes, searchQuery]);
@@ -635,111 +604,6 @@ export function MainWindow({
     };
   }, [applyNote, clearCurrentNote]);
 
-  useEffect(() => {
-    let active = true;
-
-    void getUpdateStatus()
-      .then((status) => {
-        if (!active) return;
-        syncUpdateStatus(status);
-      })
-      .catch((error) => {
-        console.error("failed to load update status", error);
-      });
-
-    const bindEvents = async () => {
-      const unlistenFns: UnlistenFn[] = [];
-      const disposeAll = () => {
-        for (const unlisten of unlistenFns.splice(0)) {
-          unlisten();
-        }
-      };
-
-      try {
-        unlistenFns.push(
-          await listen<UpdateState>("update://checking", (event) => {
-            if (!active) return;
-            syncUpdateStatus(event.payload);
-          }),
-        );
-
-        unlistenFns.push(
-          await listen<UpdateState>("update://checked", (event) => {
-            if (!active) return;
-            syncUpdateStatus(event.payload);
-          }),
-        );
-
-        unlistenFns.push(
-          await listen<UpdateState>("update://download-finished", (event) => {
-            if (!active) return;
-            syncUpdateStatus(event.payload);
-          }),
-        );
-
-        unlistenFns.push(
-          await listen<UpdateState>("update://install-finished", (event) => {
-            if (!active) return;
-            syncUpdateStatus(event.payload);
-          }),
-        );
-
-        unlistenFns.push(
-          await listen("update://error", () => {
-            if (!active) return;
-            void getUpdateStatus()
-              .then((status) => {
-                if (!active) return;
-                syncUpdateStatus(status);
-              })
-              .catch((error) => {
-                console.error("failed to refresh update status after error event", error);
-              });
-          }),
-        );
-
-        unlistenFns.push(
-          await listen<UpdateErrorPayload>("update://auto-check-error", (event) => {
-            if (!active) return;
-            console.error("automatic update check failed", event.payload);
-            void getUpdateStatus()
-              .then((status) => {
-                if (!active) return;
-                syncUpdateStatus(status);
-              })
-              .catch((error) => {
-                console.error("failed to refresh update status after automatic check error", error);
-              });
-          }),
-        );
-
-        return disposeAll;
-      } catch (error) {
-        disposeAll();
-        console.error("failed to bind update event listeners", error);
-        return () => undefined;
-      }
-    };
-
-    const promise = bindEvents();
-
-    return () => {
-      active = false;
-      void promise
-        .then((dispose) => dispose())
-        .catch((error) => {
-          console.error("failed to dispose update event listeners", error);
-        });
-    };
-  }, [syncUpdateStatus]);
-
-  useEffect(() => {
-    if (!aboutUpdateReminder.showText) return;
-    const timer = window.setTimeout(() => {
-      setAboutUpdateReminder((current) => dismissAboutUpdateReminderText(current));
-    }, ABOUT_UPDATE_LABEL_DURATION_MS);
-    return () => window.clearTimeout(timer);
-  }, [aboutUpdateReminder.showText]);
   useEffect(() => {
     if (visibleSidePanel) {
       setMountedSidePanel(visibleSidePanel);
@@ -962,46 +826,6 @@ export function MainWindow({
   ]);
 
   useEffect(() => {
-    const unlisten = listen<UpdateInstallPrepareRequest>("update://prepare-install", (event) => {
-      const respond = async () => {
-        const windowLabel = windowLabelRef.current;
-        if (saveStateRef.current !== "dirty") {
-          await reportInstallPreparation(event.payload.requestId, windowLabel, "ready");
-          return;
-        }
-
-        const saved = await saveCurrentNote();
-        await reportInstallPreparation(
-          event.payload.requestId,
-          windowLabel,
-          saved ? "ready" : "failed",
-          saved
-            ? undefined
-            : t("settings.update.error.installSaveFailed", {
-                defaultValue: "安装前自动保存失败，请先处理当前笔记后重试",
-              }),
-        );
-      };
-
-      void respond().catch(async (error) => {
-        await reportInstallPreparation(
-          event.payload.requestId,
-          windowLabelRef.current,
-          "failed",
-          error instanceof Error
-            ? error.message
-            : t("settings.update.error.installSaveFailed", {
-                defaultValue: "安装前自动保存失败，请先处理当前笔记后重试",
-              }),
-        ).catch(() => undefined);
-      });
-    });
-    return () => {
-      void unlisten.then((fn) => fn());
-    };
-  }, [saveCurrentNote, t]);
-
-  useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if ((event.ctrlKey || event.metaKey) && event.key === "s") {
         event.preventDefault();
@@ -1131,7 +955,6 @@ export function MainWindow({
       const nextOpen = !open;
       if (nextOpen) {
         setSettingsOpen(false);
-        setAboutUpdateReminder((current) => dismissAboutUpdateReminderText(current));
       }
       return nextOpen;
     });
@@ -1528,33 +1351,20 @@ export function MainWindow({
     toggleMaximize();
   };
 
-  const handleMinimize = () => {
-    void minimizeCurrentWindow();
-  };
-
-  const handleMaximize = () => {
-    toggleMaximize();
-  };
-
-  const handleClose = () => {
-    void closeCurrentWindow();
-  };
-  const aboutButtonLabel = t("settings.update.title", { defaultValue: "更新" });
-  const aboutButtonExpanded = aboutUpdateReminder.showText;
-  const aboutButtonTitle = aboutUpdateReminder.hasPendingUpdate
-    ? aboutButtonLabel
-    : t("main.window.about", { defaultValue: "关于" });
+  const aboutButtonTitle = t("main.window.about", { defaultValue: "关于" });
 
   return (
     <div className="w-full h-screen flex flex-col">
       <div className="relative noise-bg bg-cloud overflow-hidden flex flex-col flex-1">
         <BackgroundLayer config={settingsConfig} />
         <div
-          className="relative z-10 flex items-center justify-between pl-5 pr-0 h-11 bg-paper/55 backdrop-blur-[1px] border-b border-paper-deep/30 shrink-0 select-none cursor-default"
+          className="relative z-10 flex items-center justify-between pl-3 pr-0 h-11 bg-paper/55 backdrop-blur-[1px] border-b border-paper-deep/30 shrink-0 select-none cursor-default"
           onMouseDown={handleTitleBarDrag}
           onDoubleClick={handleTitleBarDoubleClick}
         >
           <div className="flex items-center gap-3 min-w-0">
+            <TrafficLights isMaximized={isMaximized} />
+            <div className="w-px h-4 bg-paper-deep/30 mx-1" />
             <span className="text-[15px] font-serif font-medium text-ink-soft tracking-wide leading-none">
               花笺
             </span>
@@ -1606,121 +1416,28 @@ export function MainWindow({
             </button>
             <button
               onClick={handleOpenAbout}
-              className={`h-11 flex items-center justify-center overflow-hidden text-ink-ghost hover:text-ink-faint hover:bg-paper-warm transition-[width,padding,gap,background-color,color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer ${
-                aboutButtonExpanded ? "w-[72px] gap-1.5 px-3" : "w-10 gap-0 px-0"
-              }`}
+              className="w-10 h-11 flex items-center justify-center text-ink-ghost hover:text-ink-faint hover:bg-paper-warm transition-all cursor-pointer"
               title={aboutButtonTitle}
               aria-label={aboutButtonTitle}
             >
-              {aboutUpdateReminder.hasPendingUpdate ? (
-                <svg
-                  data-testid="main-about-update-icon"
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M12 16V8" />
-                  <path d="m8.5 11.5 3.5-3.5 3.5 3.5" />
-                </svg>
-              ) : (
-                <svg
-                  data-testid="main-about-info-icon"
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M12 16v-4" />
-                  <path d="M12 8h.01" />
-                </svg>
-              )}
-              {aboutUpdateReminder.hasPendingUpdate ? (
-                <span
-                  data-testid="main-about-update-label"
-                  className={`overflow-hidden whitespace-nowrap text-[11px] font-body leading-none transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                    aboutButtonExpanded
-                      ? "max-w-[24px] translate-x-0 opacity-100"
-                      : "max-w-0 translate-x-1 opacity-0"
-                  }`}
-                >
-                  {aboutButtonLabel}
-                </span>
-              ) : null}
+              <svg
+                data-testid="main-about-info-icon"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 16v-4" />
+                <path d="M12 8h.01" />
+              </svg>
             </button>
 
             <div className="w-px h-4 bg-paper-deep/30 mx-0.5" />
-
-            <button
-              onClick={handleMinimize}
-              className="w-11 h-11 flex items-center justify-center text-ink-ghost hover:text-ink-soft hover:bg-paper-warm transition-all cursor-pointer"
-              title={t("main.window.minimize", { defaultValue: "最小化" })}
-            >
-              <svg width="12" height="12" viewBox="0 0 12 12">
-                <rect x="1" y="5.5" width="10" height="1" fill="currentColor" rx="0.5" />
-              </svg>
-            </button>
-            <button
-              onClick={handleMaximize}
-              className="w-11 h-11 flex items-center justify-center text-ink-ghost hover:text-ink-soft hover:bg-paper-warm transition-all cursor-pointer"
-              title={
-                isMaximized
-                  ? t("main.window.restore", { defaultValue: "还原" })
-                  : t("main.window.maximize", { defaultValue: "最大化" })
-              }
-            >
-              {isMaximized ? (
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 12 12"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                >
-                  <rect x="3" y="3" width="7" height="7" rx="1" />
-                  <path d="M3 5H2V2a1 1 0 0 1 1-1h5v1" />
-                </svg>
-              ) : (
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 12 12"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                >
-                  <rect x="1.5" y="1.5" width="9" height="9" rx="1.5" />
-                </svg>
-              )}
-            </button>
-            <button
-              onClick={handleClose}
-              className="w-11 h-11 flex items-center justify-center text-ink-ghost hover:text-red-500 hover:bg-danger-bg transition-all cursor-pointer"
-              title={t("main.window.close", { defaultValue: "关闭" })}
-            >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 12 12"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              >
-                <path d="M2 2l8 8M10 2l-8 8" />
-              </svg>
-            </button>
           </div>
         </div>
 

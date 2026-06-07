@@ -2,7 +2,6 @@ import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { UpdateSettingsSection } from "../features/update/UpdateSettingsSection";
 import contributors from "../generated/contributors.json";
 import { getTips, parseTip } from "../locales/tips";
 
@@ -91,8 +90,6 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
             </p>
           )}
         </section>
-
-        <UpdateSettingsSection mode="checkOnly" />
 
         <div className="space-y-2">
           <section className="space-y-1 py-2 border-y border-paper-deep/25">
