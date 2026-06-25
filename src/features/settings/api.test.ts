@@ -50,6 +50,7 @@ describe("settings api", () => {
       tileRenderMarkdown: false,
       renderHtmlMarkdown: false,
       openAtCursor: true,
+      syncScroll: true,
     };
     mockedInvoke.mockResolvedValue(config);
 
@@ -81,6 +82,7 @@ describe("settings api", () => {
       tileRenderMarkdown: false,
       renderHtmlMarkdown: false,
       openAtCursor: true,
+      syncScroll: true,
     };
     mockedInvoke.mockResolvedValue(config);
 

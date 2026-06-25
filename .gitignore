@@ -64,3 +64,9 @@ temp/
 nul
 tsconfig.tsbuildinfo
 Docs/windows-install-chain-code-review.md
+build-output/
+build-*.ps1
+build-*.mjs
+build-*.bat
+test-write*.mjs
+check-dist.ps1

@@ -80,6 +80,8 @@ pub struct AppConfig {
     pub last_known_base_dir: Option<String>,
     #[serde(default = "default_open_at_cursor")]
     pub open_at_cursor: bool,
+    #[serde(default = "default_sync_scroll")]
+    pub sync_scroll: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -826,6 +828,7 @@ impl NoteStore {
             toggle_visibility_shortcut: default_toggle_visibility_shortcut(),
             last_known_base_dir: Some(self.base_dir.to_string_lossy().to_string()),
             open_at_cursor: default_open_at_cursor(),
+            sync_scroll: default_sync_scroll(),
         }
     }
 
@@ -1238,6 +1241,10 @@ fn default_toggle_visibility_shortcut() -> String {
 }
 
 fn default_open_at_cursor() -> bool {
+    true
+}
+
+fn default_sync_scroll() -> bool {
     true
 }
 
