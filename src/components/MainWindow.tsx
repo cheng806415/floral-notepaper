@@ -329,6 +329,8 @@ export function MainWindow({
   const [categoryMenuClosing, setCategoryMenuClosing] = useState(false);
   const [categoryMenuConfirmDelete, setCategoryMenuConfirmDelete] = useState(false);
   const contentRef = useRef<HTMLTextAreaElement>(null);
+  const previewScrollRef = useRef<HTMLDivElement>(null);
+  const isSyncingScroll = useRef(false);
   const windowLabelRef = useRef("main");
   const externalFileMtimeRef = useRef<number>(0);
   const lastExternalSaveRef = useRef<number>(0);
@@ -1187,6 +1189,44 @@ export function MainWindow({
     if (selectedId) setSaveState("dirty");
   };
 
+  const handleEditorScroll = useCallback(() => {
+    if (!settingsConfig?.syncScroll) return;
+    if (isSyncingScroll.current) return;
+    const editor = contentRef.current;
+    const preview = previewScrollRef.current;
+    if (!editor || !preview) return;
+
+    isSyncingScroll.current = true;
+    const editorScrollHeight = editor.scrollHeight - editor.clientHeight;
+    const previewScrollHeight = preview.scrollHeight - preview.clientHeight;
+    if (editorScrollHeight > 0) {
+      const ratio = editor.scrollTop / editorScrollHeight;
+      preview.scrollTop = ratio * previewScrollHeight;
+    }
+    requestAnimationFrame(() => {
+      isSyncingScroll.current = false;
+    });
+  }, [settingsConfig?.syncScroll]);
+
+  const handlePreviewScroll = useCallback(() => {
+    if (!settingsConfig?.syncScroll) return;
+    if (isSyncingScroll.current) return;
+    const editor = contentRef.current;
+    const preview = previewScrollRef.current;
+    if (!editor || !preview) return;
+
+    isSyncingScroll.current = true;
+    const editorScrollHeight = editor.scrollHeight - editor.clientHeight;
+    const previewScrollHeight = preview.scrollHeight - preview.clientHeight;
+    if (previewScrollHeight > 0) {
+      const ratio = preview.scrollTop / previewScrollHeight;
+      editor.scrollTop = ratio * editorScrollHeight;
+    }
+    requestAnimationFrame(() => {
+      isSyncingScroll.current = false;
+    });
+  }, [settingsConfig?.syncScroll]);
+
   const ensureNoteSaved = useCallback(async (): Promise<string | null> => {
     if (selectedId) return selectedId;
     try {
@@ -1318,6 +1358,15 @@ export function MainWindow({
       document.body.style.cursor = "";
     };
   }, [isResizingSplit]);
+
+  useEffect(() => {
+    if (viewMode !== "split") return;
+    if (!settingsConfig?.syncScroll) return;
+    const timer = window.setTimeout(() => {
+      handleEditorScroll();
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [viewMode, noteTransitionKey, settingsConfig?.syncScroll, handleEditorScroll]);
 
   const handlePinEntry = async () => {
     if (!selectedId) return;
@@ -2251,6 +2300,7 @@ export function MainWindow({
                             setContent(event.target.value);
                             markDirty();
                           }}
+                          onScroll={handleEditorScroll}
                           onPaste={imagePasteHandler}
                           onDrop={imageDropHandler}
                           onDragOver={imageDragOverHandler}
@@ -2299,6 +2349,8 @@ export function MainWindow({
                         </div>
                       )}
                       <div
+                        ref={previewScrollRef}
+                        onScroll={handlePreviewScroll}
                         className={`flex-1 overflow-y-auto px-6 pb-6 ${
                           viewMode === "preview" ? "pt-3" : "pt-1"
                         }`}

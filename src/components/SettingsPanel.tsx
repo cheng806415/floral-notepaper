@@ -202,6 +202,11 @@ export function SettingsPanel({ config, onChange, onChooseNotesDir, onClose }: S
             checked={config.renderHtmlMarkdown}
             onChange={(checked) => setConfigValue("renderHtmlMarkdown", checked)}
           />
+          <ToggleRow
+            label={t("settings.syncScroll", { defaultValue: "编辑预览同步滚动" })}
+            checked={config.syncScroll ?? true}
+            onChange={(checked) => setConfigValue("syncScroll", checked)}
+          />
         </section>
 
         {/* 快捷键功能设置区域，与上方常规设置分开 */}
