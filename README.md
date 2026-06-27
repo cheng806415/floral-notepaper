@@ -11,22 +11,23 @@
 轻量、优雅、现代化的本地便签工具<br>
 基于 Tauri 2 + React 构建
 
-[反馈问题](https://github.com/Achilng/floral-notepaper/issues) · [更新日志](https://github.com/Achilng/floral-notepaper/releases) <br>
-[快速开始](#快速开始) · [FAQ](https://github.com/Achilng/floral-notepaper/wiki) · [构建指南](#从源码构建)
+[反馈问题](https://github.com/cheng806415/floral-notepaper/issues) · [更新日志](https://github.com/cheng806415/floral-notepaper/releases) <br>
+[快速开始](#快速开始) · [用户指南](Docs/用户指南.md) · [构建指南](#从源码构建)
 
-[![Version](https://img.shields.io/github/v/release/Achilng/floral-notepaper)](https://github.com/Achilng/floral-notepaper/releases/latest)
+[![Version](https://img.shields.io/github/v/release/cheng806415/floral-notepaper)](https://github.com/cheng806415/floral-notepaper/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Stars](https://img.shields.io/github/stars/Achilng/floral-notepaper?color=ffcb47&labelColor=black)</br>
+![Stars](https://img.shields.io/github/stars/cheng806415/floral-notepaper?color=ffcb47&labelColor=black)</br>
 ![React 19](https://img.shields.io/badge/React-19-blue?logo=react)
 ![Tauri v2](https://img.shields.io/badge/Tauri-v2-%2324C8D8?logo=tauri)
 ![Rust Edition 2021](https://img.shields.io/badge/Rust-2021-%23000000?logo=rust)<br>
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Achilng/floral-notepaper)
 
 </div>
 
 <!-- markdownlint-restore -->
 
 ---
+
+本项目基于 [Achilng/floral-notepaper](https://github.com/Achilng/floral-notepaper) 进行更新维护，在原有基础上修复问题并增加新功能。
 
 ## 为什么选择花笺
 
@@ -73,7 +74,7 @@
 
 #### 通过 GitHub 下载
 
-请前往 [Release 页](https://github.com/Achilng/floral-notepaper/releases/latest) 下载花笺
+请前往 [Release 页](https://github.com/cheng806415/floral-notepaper/releases/latest) 下载花笺
 
 ##### 下载参考
 
@@ -88,20 +89,16 @@
 
 如遇安装问题，请参考：
 
-- Wiki 中的 [macOS 安装指引](https://github.com/Achilng/floral-notepaper/wiki/macOS-%E5%AE%89%E8%A3%85%E6%8C%87%E5%BC%95-%7C-macOS-Installation-Guidance)
+- Release 页中的 [macOS 安装说明](https://github.com/cheng806415/floral-notepaper/releases/tag/v1.1.0#macos-安装说明)
 - 或视频（Bilibili）：[Mac云课堂 - 在 Mac 上装软件，要学会和苹果斗智斗勇](https://www.bilibili.com/video/BV1tg411t7hN)
 
 ### 从源码构建
 
 请参考 [CONTRIBUTING.md](CONTRIBUTING.md)
 
-## Star History
+## 致谢
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Achilng/floral-notepaper&type=Date&legend=top-left)](https://star-history.com/#Achilng/floral-notepaper&Date)
-
-## 🌟 贡献者
-
-[![contrib.rocks](https://contrib.rocks/image?repo=Achilng/floral-notepaper&max=1000)](https://contrib.rocks/image?repo=Achilng/floral-notepaper&max=1000)
+感谢原作者 [@Achilng](https://github.com/Achilng) 创建花笺项目，以及所有为原项目做出贡献的开发者。
 
 ## 许可证
 

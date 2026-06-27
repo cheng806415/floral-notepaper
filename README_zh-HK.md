@@ -11,22 +11,23 @@
 輕巧、優雅、現代化的本機便箋工具<br>
 基於 Tauri 2 + React 構建
 
-[回報問題](https://github.com/Achilng/floral-notepaper/issues) · [更新日誌](https://github.com/Achilng/floral-notepaper/releases) <br>
-[快速開始](#快速開始) · [FAQ](https://github.com/Achilng/floral-notepaper/wiki) · [構建指南](#從原始碼構建)
+[回報問題](https://github.com/cheng806415/floral-notepaper/issues) · [更新日誌](https://github.com/cheng806415/floral-notepaper/releases) <br>
+[快速開始](#快速開始) · [用戶指南](Docs/用户指南.md) · [構建指南](#從原始碼構建)
 
-[![Version](https://img.shields.io/github/v/release/Achilng/floral-notepaper)](https://github.com/Achilng/floral-notepaper/releases/latest)
+[![Version](https://img.shields.io/github/v/release/cheng806415/floral-notepaper)](https://github.com/cheng806415/floral-notepaper/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Stars](https://img.shields.io/github/stars/Achilng/floral-notepaper?color=ffcb47&labelColor=black)</br>
+![Stars](https://img.shields.io/github/stars/cheng806415/floral-notepaper?color=ffcb47&labelColor=black)</br>
 ![React 19](https://img.shields.io/badge/React-19-blue?logo=react)
 ![Tauri v2](https://img.shields.io/badge/Tauri-v2-%2324C8D8?logo=tauri)
 ![Rust Edition 2021](https://img.shields.io/badge/Rust-2021-%23000000?logo=rust)<br>
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Achilng/floral-notepaper)
 
 </div>
 
 <!-- markdownlint-restore -->
 
 ---
+
+本專案基於 [Achilng/floral-notepaper](https://github.com/Achilng/floral-notepaper) 進行更新維護，在原有基礎上修復問題並增加新功能。
 
 ## 為什麼選擇花箋
 
@@ -73,7 +74,7 @@
 
 #### 透過 GitHub 下載
 
-請前往 [Release 頁](https://github.com/Achilng/floral-notepaper/releases/latest) 下載花箋
+請前往 [Release 頁](https://github.com/cheng806415/floral-notepaper/releases/latest) 下載花箋
 
 ##### 下載參考
 
@@ -88,20 +89,16 @@
 
 如遇安裝問題，請參考：
 
-- Wiki 中的 [macOS 安裝指引](https://github.com/Achilng/floral-notepaper/wiki/macOS-%E5%AE%89%E8%A3%85%E6%8C%87%E5%BC%95-%7C-macOS-Installation-Guidance)
+- Release 頁中的 [macOS 安裝說明](https://github.com/cheng806415/floral-notepaper/releases/tag/v1.1.0#macos-安装说明)
 - 或影片（Bilibili）：[Mac雲課堂 - 在 Mac 上裝軟件，要學會和蘋果鬥智鬥勇](https://www.bilibili.com/video/BV1tg411t7hN)
 
 ### 從原始碼構建
 
 請參考 [CONTRIBUTING.md](CONTRIBUTING.md)
 
-## Star History
+## 致謝
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Achilng/floral-notepaper&type=Date&legend=top-left)](https://star-history.com/#Achilng/floral-notepaper&Date)
-
-## 🌟 貢獻者
-
-[![contrib.rocks](https://contrib.rocks/image?repo=Achilng/floral-notepaper&max=1000)](https://contrib.rocks/image?repo=Achilng/floral-notepaper&max=1000)
+感謝原作者 [@Achilng](https://github.com/Achilng) 創建花箋專案，以及所有為原專案做出貢獻的開發者。
 
 ## 授權條款
 

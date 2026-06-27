@@ -11,22 +11,23 @@
 A lightweight, elegant, and modern sticky note app for your desktop<br>
 Built with Tauri 2 + React
 
-[Report an Issue](https://github.com/Achilng/floral-notepaper/issues) · [Changelog](https://github.com/Achilng/floral-notepaper/releases) <br>
-[Quick Start](#quick-start) · [FAQ](https://github.com/Achilng/floral-notepaper/wiki) · [Building from Source](#building-from-source)
+[Report an Issue](https://github.com/cheng806415/floral-notepaper/issues) · [Changelog](https://github.com/cheng806415/floral-notepaper/releases) <br>
+[Quick Start](#quick-start) · [User Guide](Docs/用户指南.md) · [Building from Source](#building-from-source)
 
-[![Version](https://img.shields.io/github/v/release/Achilng/floral-notepaper)](https://github.com/Achilng/floral-notepaper/releases/latest)
+[![Version](https://img.shields.io/github/v/release/cheng806415/floral-notepaper)](https://github.com/cheng806415/floral-notepaper/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Stars](https://img.shields.io/github/stars/Achilng/floral-notepaper?color=ffcb47&labelColor=black)</br>
+![Stars](https://img.shields.io/github/stars/cheng806415/floral-notepaper?color=ffcb47&labelColor=black)</br>
 ![React 19](https://img.shields.io/badge/React-19-blue?logo=react)
 ![Tauri v2](https://img.shields.io/badge/Tauri-v2-%2324C8D8?logo=tauri)
 ![Rust Edition 2021](https://img.shields.io/badge/Rust-2021-%23000000?logo=rust)<br>
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Achilng/floral-notepaper)
 
 </div>
 
 <!-- markdownlint-restore -->
 
 ---
+
+This project is maintained as an updated version based on [Achilng/floral-notepaper](https://github.com/Achilng/floral-notepaper), with bug fixes and new features added on top of the original.
 
 ## Why Floral Notepaper
 
@@ -73,7 +74,7 @@ Most note-taking or sticky note apps out there are either bloated and steep to l
 
 #### Via GitHub
 
-Head over to the [Releases page](https://github.com/Achilng/floral-notepaper/releases/latest) to download.
+Head over to the [Releases page](https://github.com/cheng806415/floral-notepaper/releases/latest) to download.
 
 ##### Download Reference
 
@@ -88,20 +89,16 @@ Head over to the [Releases page](https://github.com/Achilng/floral-notepaper/rel
 
 If you encounter installation issues, please refer to:
 
-- Wiki: [macOS Installation Guidance](https://github.com/Achilng/floral-notepaper/wiki/macOS-%E5%AE%89%E8%A3%85%E6%8C%87%E5%BC%95-%7C-macOS-Installation-Guidance)
+- The [macOS installation notes](https://github.com/cheng806415/floral-notepaper/releases/tag/v1.1.0#macos-安装说明) on the Releases page
 - Or video (Bilibili): [Mac云课堂 - Installing software on Mac means learning to wrestle with Apple](https://www.bilibili.com/video/BV1tg411t7hN)
 
 ### Building from Source
 
 Please refer to [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Star History
+## Acknowledgements
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Achilng/floral-notepaper&type=Date&legend=top-left)](https://star-history.com/#Achilng/floral-notepaper&Date)
-
-## 🌟 Contributors
-
-[![contrib.rocks](https://contrib.rocks/image?repo=Achilng/floral-notepaper&max=1000)](https://contrib.rocks/image?repo=Achilng/floral-notepaper&max=1000)
+Thanks to the original author [@Achilng](https://github.com/Achilng) for creating Floral Notepaper, and all contributors who worked on the original project.
 
 ## License
 

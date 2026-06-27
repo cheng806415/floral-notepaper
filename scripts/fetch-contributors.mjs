@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUTPUT = resolve(__dirname, "../src/generated/contributors.json");
 
-const REPO = "Achilng/floral-notepaper";
+const REPO = "cheng806415/floral-notepaper";
 const API_URL = `https://api.github.com/repos/${REPO}/contributors?per_page=100`;
 
 async function fetchContributors() {

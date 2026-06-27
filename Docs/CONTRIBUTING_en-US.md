@@ -21,7 +21,7 @@ Thank you for your interest in Floral Notepaper! This guide will help you get st
 ### Clone & Launch
 
 ```bash
-git clone git@github.com:Achilng/floral-notepaper.git
+git clone git@github.com:cheng806415/floral-notepaper.git
 cd floral-notepaper
 npm install
 
@@ -85,7 +85,7 @@ npx oxfmt --check                           # Format check
 
 ## Pull Request Process
 
-1. **Search** [existing PRs](https://github.com/Achilng/floral-notepaper/pulls) first to avoid duplicate work
+1. **Search** [existing PRs](https://github.com/cheng806415/floral-notepaper/pulls) first to avoid duplicate work
 2. Fork this repository and create your feature/fix branch from `main`
 3. Once development is complete, ensure all local checks pass
 4. Submit a PR to the `main` branch, filling out all sections of the **PR template**
@@ -100,6 +100,6 @@ PR titles should also follow Conventional Commits, e.g. `feat: add note tagging 
 
 ## Feedback
 
-- Report a bug: [Submit an Issue](https://github.com/Achilng/floral-notepaper/issues/new?template=bug.yml)
-- Feature request: [Submit an Issue](https://github.com/Achilng/floral-notepaper/issues/new?template=enhancement.yml)
-- General discussion: [GitHub Discussions](https://github.com/Achilng/floral-notepaper/discussions)
+- Report a bug: [Submit an Issue](https://github.com/cheng806415/floral-notepaper/issues/new?template=bug.yml)
+- Feature request: [Submit an Issue](https://github.com/cheng806415/floral-notepaper/issues/new?template=enhancement.yml)
+- General discussion: [GitHub Discussions](https://github.com/cheng806415/floral-notepaper/discussions)
