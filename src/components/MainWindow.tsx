@@ -39,6 +39,7 @@ import {
 import { cleanUnusedImages } from "../features/images/api";
 import { useImagePaste } from "../features/images/useImagePaste";
 import { useImageBaseDir } from "../features/images/useImageBaseDir";
+import { generateTitle } from "../features/ai/api";
 import type { ExternalFile, Note, NoteMetadata } from "../features/notes/types";
 import {
   countNoteChars,
@@ -289,6 +290,7 @@ export function MainWindow({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [content, setContent] = useState("");
   const [title, setTitle] = useState("");
+  const [isAiGenerating, setIsAiGenerating] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -826,6 +828,27 @@ export function MainWindow({
     selectedNote,
     title,
   ]);
+
+  const handleAiGenerateTitle = useCallback(async () => {
+    if (!content.trim() || isAiGenerating) return;
+    if (!settingsConfig?.aiProvider?.enabled || !settingsConfig.aiProvider.apiEndpoint || !settingsConfig.aiProvider.apiKey || !settingsConfig.aiProvider.model) {
+      showToast(t("settings.ai.notConfigured", { defaultValue: "请先在设置中配置 AI 提供商" }));
+      return;
+    }
+    setIsAiGenerating(true);
+    try {
+      const newTitle = await generateTitle({
+        config: settingsConfig.aiProvider,
+        content,
+      });
+      setTitle(newTitle);
+      markDirty();
+    } catch (error) {
+      showToast(getErrorMessage(error));
+    } finally {
+      setIsAiGenerating(false);
+    }
+  }, [content, isAiGenerating, settingsConfig?.aiProvider, t]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -2203,23 +2226,45 @@ export function MainWindow({
               key={noteTransitionKey}
               className="animate-note-enter px-6 pt-4 pb-2 shrink-0 border-b border-paper-deep/15"
             >
-              <input
-                type="text"
-                value={title}
-                onChange={(event) => {
-                  setTitle(event.target.value);
-                  markDirty();
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    contentRef.current?.focus();
-                  }
-                }}
-                placeholder={t("common.untitledNote", { defaultValue: "无标题笔记" })}
-                disabled={!selectedId}
-                className="w-full text-[20px] font-display font-bold text-ink placeholder:text-ink-ghost/50 tracking-wide disabled:opacity-60"
-              />
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(event) => {
+                    setTitle(event.target.value);
+                    markDirty();
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      contentRef.current?.focus();
+                    }
+                  }}
+                  placeholder={t("common.untitledNote", { defaultValue: "无标题笔记" })}
+                  disabled={!selectedId}
+                  className="flex-1 min-w-0 text-[20px] font-display font-bold text-ink placeholder:text-ink-ghost/50 tracking-wide disabled:opacity-60"
+                />
+                {settingsConfig?.aiProvider?.enabled && (
+                  <button
+                    type="button"
+                    onClick={() => void handleAiGenerateTitle()}
+                    disabled={!selectedId || isAiGenerating || !content.trim()}
+                    title={t("settings.ai.generateTitle", { defaultValue: "AI 生成标题" })}
+                    className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg text-ink-ghost hover:text-bamboo hover:bg-bamboo-mist/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer"
+                  >
+                    {isAiGenerating ? (
+                      <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                      </svg>
+                    ) : (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z" />
+                        <path d="M18 2v2M22 6h-2M6 2v2M2 6h2" />
+                      </svg>
+                    )}
+                  </button>
+                )}
+              </div>
               <div className="flex items-center gap-3 mt-1.5">
                 <span className="text-[10px] text-ink-ghost font-mono tabular-nums truncate max-w-[200px]">
                   {selectedExternalFile

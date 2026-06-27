@@ -22,6 +22,39 @@ const MACOS_SHORTCUT_MIGRATION_MARKER: &str = ".macos-shortcut-default-v3";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct AiProviderConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub provider_id: String,
+    #[serde(default)]
+    pub api_endpoint: String,
+    #[serde(default)]
+    pub api_key: String,
+    #[serde(default)]
+    pub model: String,
+    #[serde(default)]
+    pub api_format: String,
+    #[serde(default = "default_ai_title_prompt")]
+    pub title_prompt: String,
+}
+
+impl Default for AiProviderConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            provider_id: String::new(),
+            api_endpoint: String::new(),
+            api_key: String::new(),
+            model: String::new(),
+            api_format: String::new(),
+            title_prompt: default_ai_title_prompt(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct AppConfig {
     #[serde(default = "default_locale")]
     pub locale: String,
@@ -82,6 +115,8 @@ pub struct AppConfig {
     pub open_at_cursor: bool,
     #[serde(default = "default_sync_scroll")]
     pub sync_scroll: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ai_provider: Option<AiProviderConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -829,6 +864,7 @@ impl NoteStore {
             last_known_base_dir: Some(self.base_dir.to_string_lossy().to_string()),
             open_at_cursor: default_open_at_cursor(),
             sync_scroll: default_sync_scroll(),
+            ai_provider: None,
         }
     }
 
@@ -1252,6 +1288,10 @@ fn default_locale() -> String {
     "zh-CN".into()
 }
 
+fn default_ai_title_prompt() -> String {
+    "请为以下笔记内容生成一个简洁、准确的标题，不超过20个字，不要加引号，不要加任何前缀或解释：".into()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1402,6 +1442,8 @@ mod tests {
             toggle_visibility_shortcut: String::new(),
             last_known_base_dir: None,
             open_at_cursor: true,
+            sync_scroll: true,
+            ai_provider: None,
         };
 
         store.save_config(saved.clone()).expect("save config");

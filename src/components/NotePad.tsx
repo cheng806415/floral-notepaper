@@ -1,107 +1,35 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { MouseEvent } from "react";
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { createNote, getErrorMessage, getNote, listNotes, updateNote } from "../features/notes/api";
 import { useImagePaste } from "../features/images/useImagePaste";
 import { useImageBaseDir } from "../features/images/useImageBaseDir";
 import { showToast } from "./Toast";
-import type { Note, NoteMetadata } from "../features/notes/types";
-import {
-  countNoteChars,
-  formatShortDate,
-  getDisplayTitle,
-  metadataFromNote,
-} from "../features/notes/noteUtils";
+import { getErrorMessage } from "../features/notes/api";
+import { generateTitle } from "../features/ai/api";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import {
-  animateCurrentWindowBounds,
-  closeCurrentWindow,
-  getCurrentWindowBounds,
-  recycleCurrentNotepad,
-  setCurrentWindowAlwaysOnTop,
-  showCurrentWindow,
-  startCurrentWindowDrag,
-  startCurrentWindowResize,
-} from "../features/windows/controls";
-import { openNoteInEditor } from "../features/windows/api";
-import type { ResizeDirection } from "../features/windows/controls";
-import { getConfig } from "../features/settings/api";
-import {
-  DEFAULT_TILE_COLOR,
-  normalizeTileColor,
-  resolveTileColor,
-} from "../features/settings/tileColor";
-import type { TileColorMode } from "../features/settings/types";
+import { showCurrentWindow } from "../features/windows/controls";
 import { shouldSaveBeforeSwitchingToTile } from "../features/windows/noteSurfaceSavePolicy";
 import {
   NOTE_SURFACE_ACTION_EVENT,
   surfaceActionFromEvent,
 } from "../features/windows/surfaceActions";
-import {
-  NOTE_SURFACE_MODE_EVENT,
-  getSurfaceTargetBounds,
-  surfaceModeFromEvent,
-} from "../features/windows/surfaceMode";
-import type { NoteSurfaceMode } from "../features/windows/surfaceMode";
-import {
-  emitTileWindowUnpinned,
-  tileSurfaceModeUnpinNoteId,
-} from "../features/windows/tileWindowEvents";
+import { DEFAULT_TILE_COLOR } from "../features/settings/tileColor";
 import { Tile } from "./Tile";
 import { TrafficLights } from "./TrafficLights";
+import { SurfaceResizeHandles } from "./SurfaceResizeHandles";
+import { NoteEditor } from "./NoteEditor";
+import { NoteList } from "./NoteList";
+import { useNoteEditor, type NotePadStatus } from "../hooks/useNoteEditor";
+import { useWindowManager } from "../hooks/useWindowManager";
+import { useSurfaceConfig } from "../hooks/useSurfaceConfig";
 
 type OpenMode = "new" | "open";
-type NotePadStatus = "empty" | "opened" | "saved" | "dirty" | "saveFailed" | "copied";
 
 interface NotePadProps {
   initialNoteId?: string;
-  initialSurfaceMode?: NoteSurfaceMode;
+  initialSurfaceMode?: "pad" | "tile";
   initialAutoSave?: boolean;
   initialTileColor?: string;
-}
-
-const surfaceResizeHandles: Array<{
-  direction: ResizeDirection;
-  className: string;
-  size: string;
-}> = [
-  {
-    direction: "East",
-    size: "w-2 h-full",
-    className: "top-0 right-0 cursor-ew-resize",
-  },
-  {
-    direction: "South",
-    size: "w-full h-2",
-    className: "bottom-0 left-0 cursor-ns-resize",
-  },
-  {
-    direction: "SouthEast",
-    size: "w-5 h-5",
-    className: "bottom-0 right-0 cursor-nwse-resize",
-  },
-];
-
-function SurfaceResizeHandles() {
-  return (
-    <>
-      {surfaceResizeHandles.map((handle) => (
-        <div
-          key={handle.direction}
-          aria-hidden="true"
-          data-surface-resize-handle="true"
-          data-resize-direction={handle.direction}
-          onMouseDown={(event) => {
-            event.stopPropagation();
-            void startCurrentWindowResize(handle.direction).catch(() => undefined);
-          }}
-          className={`absolute ${handle.size} opacity-0 ${handle.className}`}
-        />
-      ))}
-    </>
-  );
 }
 
 export function NotePad({
@@ -111,32 +39,38 @@ export function NotePad({
   initialTileColor = DEFAULT_TILE_COLOR,
 }: NotePadProps) {
   const { t } = useTranslation();
-  const [surfaceMode, setSurfaceMode] = useState<NoteSurfaceMode>(initialSurfaceMode);
   const [mode, setMode] = useState<OpenMode>("new");
-  const [notes, setNotes] = useState<NoteMetadata[]>([]);
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [hoveredNote, setHoveredNote] = useState<string | null>(null);
-  const [status, setStatus] = useState<NotePadStatus>("empty");
-  const [noteSurfaceAutoSave, setNoteSurfaceAutoSave] = useState(initialAutoSave);
-  const [tileColorRaw, setTileColorRaw] = useState(normalizeTileColor(initialTileColor));
-  const [tileColorMode, setTileColorMode] = useState<TileColorMode>("system");
-  const [surfaceFontSize, setSurfaceFontSize] = useState(14);
-  const [tileRenderMarkdown, setTileRenderMarkdown] = useState(false);
-  const [tileColor, setTileColor] = useState(() =>
-    resolveTileColor("system", normalizeTileColor(initialTileColor)),
-  );
-  const [isExiting, setIsExiting] = useState(false);
-  const titleRef = useRef<HTMLInputElement>(null);
-  const contentRef = useRef<HTMLTextAreaElement>(null);
-  const windowLabelRef = useRef("");
-  const statusRef = useRef<NotePadStatus>("empty");
+  const [isAiGenerating, setIsAiGenerating] = useState(false);
+  const hasEnteredOnce = useRef(false);
   const isStandby = useRef(
     typeof window !== "undefined" &&
       new URLSearchParams(window.location.search).get("standby") === "1",
   );
-  const hasEnteredOnce = useRef(false);
+  const contentRef = useRef<HTMLTextAreaElement>(null);
+  const windowLabelRef = useRef("");
+
+  const { state: noteState, actions: noteActions } = useNoteEditor(initialNoteId);
+  const { state: windowState, actions: windowActions } = useWindowManager(initialSurfaceMode);
+  const { config } = useSurfaceConfig(initialAutoSave, initialTileColor);
+
+  const imageBaseDir = useImageBaseDir();
+
+  const {
+    handlePaste: imagePasteHandler,
+    handleDrop: imageDropHandler,
+    handleDragOver: imageDragOverHandler,
+  } = useImagePaste({
+    noteId: noteState.editingNoteId,
+    textareaRef: contentRef,
+    setContent: noteActions.setContent,
+    markDirty: () => noteActions.setStatus("dirty"),
+    onEnsureNoteSaved: noteActions.ensureNoteSaved,
+    onError: showToast,
+    t,
+  });
+
+  const tileNoteId = noteState.editingNoteId ?? initialNoteId ?? "";
+
   const statusLabel = useMemo<Record<NotePadStatus, string>>(
     () => ({
       empty: t("notepad.status.empty", { defaultValue: "空" }),
@@ -148,6 +82,7 @@ export function NotePad({
     }),
     [t],
   );
+
   const tabLabels = useMemo(
     () => ({
       new: t("notepad.tab.new", { defaultValue: "新建" }),
@@ -156,61 +91,6 @@ export function NotePad({
     }),
     [t],
   );
-  statusRef.current = status;
-
-  const refreshNotes = useCallback(async () => {
-    const loadedNotes = await listNotes();
-    setNotes(loadedNotes);
-    return loadedNotes;
-  }, []);
-
-  const applyNote = useCallback((note: Note) => {
-    setEditingNoteId(note.id);
-    setTitle(note.title);
-    setContent(note.content);
-    setMode("new");
-    setStatus("opened");
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function bootstrap() {
-      try {
-        const [loadedConfig] = await Promise.all([getConfig(), refreshNotes()]);
-        if (!cancelled) {
-          setNoteSurfaceAutoSave(loadedConfig.noteSurfaceAutoSave);
-          setSurfaceFontSize(loadedConfig.surfaceFontSize ?? 14);
-          setTileRenderMarkdown(loadedConfig.tileRenderMarkdown ?? false);
-          setTileColorRaw(normalizeTileColor(loadedConfig.tileColor));
-          setTileColorMode(loadedConfig.tileColorMode ?? "system");
-          setTileColor(
-            resolveTileColor(loadedConfig.tileColorMode ?? "system", loadedConfig.tileColor),
-          );
-        }
-        if (initialNoteId) {
-          const note = await getNote(initialNoteId);
-          if (!cancelled) applyNote(note);
-        }
-      } catch (error) {
-        if (!cancelled) showToast(getErrorMessage(error));
-      }
-    }
-
-    void bootstrap();
-    return () => {
-      cancelled = true;
-    };
-  }, [applyNote, initialNoteId, refreshNotes]);
-
-  useEffect(() => {
-    const unlisten = listen("notes-changed", () => {
-      void refreshNotes().catch(() => undefined);
-    });
-    return () => {
-      void unlisten.then((fn) => fn());
-    };
-  }, [refreshNotes]);
 
   useEffect(() => {
     if (isStandby.current) return;
@@ -231,39 +111,6 @@ export function NotePad({
   }, []);
 
   useEffect(() => {
-    const unlisten = listen<{
-      tileColor?: string;
-      tileColorMode?: TileColorMode;
-      surfaceFontSize?: number;
-      tileRenderMarkdown?: boolean;
-    }>("config-changed", (event) => {
-      const mode = event.payload.tileColorMode ?? tileColorMode;
-      const raw = event.payload.tileColor ?? tileColorRaw;
-      setTileColorMode(mode);
-      setTileColorRaw(normalizeTileColor(raw));
-      setTileColor(resolveTileColor(mode, raw));
-      if (event.payload.surfaceFontSize != null) setSurfaceFontSize(event.payload.surfaceFontSize);
-      if (event.payload.tileRenderMarkdown != null)
-        setTileRenderMarkdown(event.payload.tileRenderMarkdown);
-    });
-    return () => {
-      void unlisten.then((fn) => fn());
-    };
-  }, [tileColorMode, tileColorRaw]);
-
-  useEffect(() => {
-    if (tileColorMode !== "system") return;
-    const observer = new MutationObserver(() => {
-      setTileColor(resolveTileColor("system", tileColorRaw));
-    });
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-theme"],
-    });
-    return () => observer.disconnect();
-  }, [tileColorMode, tileColorRaw]);
-
-  useEffect(() => {
     let myLabel = "";
     try {
       myLabel = getCurrentWindow().label;
@@ -277,14 +124,11 @@ export function NotePad({
 
       isStandby.current = false;
       hasEnteredOnce.current = true;
-      setEditingNoteId(null);
-      setTitle("");
-      setContent("");
+      noteActions.resetDraft();
       setMode("new");
-      setStatus("empty");
-      setIsExiting(false);
-      setSurfaceMode("pad");
-      void refreshNotes().catch(() => undefined);
+      windowActions.setIsExiting(false);
+      void windowActions.switchSurfaceMode("pad", "");
+      void noteActions.refreshNotes().catch(() => undefined);
       void showCurrentWindow()
         .then(() => contentRef.current?.focus())
         .catch(() => undefined);
@@ -292,109 +136,16 @@ export function NotePad({
     return () => {
       void unlisten.then((fn) => fn());
     };
-  }, [refreshNotes]);
-
-  const saveNote = useCallback(async () => {
-    const existingCategory = notes.find((n) => n.id === editingNoteId)?.category ?? "";
-    const request = { title, content, category: existingCategory };
-    const note = editingNoteId
-      ? await updateNote(editingNoteId, request)
-      : await createNote(request);
-
-    setEditingNoteId(note.id);
-    setNotes((current) => {
-      const metadata = metadataFromNote(note);
-      const exists = current.some((item) => item.id === note.id);
-      const next = exists
-        ? current.map((item) => (item.id === note.id ? metadata : item))
-        : [metadata, ...current];
-      return [...next].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-    });
-    setStatus("saved");
-    return note;
-  }, [content, editingNoteId, title]);
-
-  const hasDraftContent = useCallback(
-    () => Boolean(editingNoteId || title.trim() || content.trim()),
-    [content, editingNoteId, title],
-  );
-
-  const imageBaseDir = useImageBaseDir();
-
-  const ensureNoteSaved = useCallback(async (): Promise<string | null> => {
-    if (editingNoteId) return editingNoteId;
-    try {
-      const note = await saveNote();
-      return note.id;
-    } catch {
-      return null;
-    }
-  }, [editingNoteId, saveNote]);
-
-  const {
-    handlePaste: imagePasteHandler,
-    handleDrop: imageDropHandler,
-    handleDragOver: imageDragOverHandler,
-  } = useImagePaste({
-    noteId: editingNoteId,
-    textareaRef: contentRef,
-    setContent,
-    markDirty: () => setStatus("dirty"),
-    onEnsureNoteSaved: ensureNoteSaved,
-    onError: showToast,
-    t,
-  });
-
-  const tileNoteId = editingNoteId ?? initialNoteId ?? "";
-
-  const switchSurfaceMode = useCallback(
-    async (nextMode: NoteSurfaceMode) => {
-      const unpinnedNoteId = tileSurfaceModeUnpinNoteId(surfaceMode, nextMode, tileNoteId);
-      setSurfaceMode(nextMode);
-      if (unpinnedNoteId) {
-        void emitTileWindowUnpinned(unpinnedNoteId).catch(() => undefined);
-      }
-
-      try {
-        if (nextMode === "tile") {
-          await setCurrentWindowAlwaysOnTop(true);
-        }
-
-        const currentBounds = await getCurrentWindowBounds();
-        await animateCurrentWindowBounds(getSurfaceTargetBounds(nextMode, currentBounds));
-      } catch (error) {
-        showToast(getErrorMessage(error));
-      }
-    },
-    [surfaceMode, tileNoteId],
-  );
-
-  useEffect(() => {
-    function handleSurfaceModeRequest(event: Event) {
-      const nextMode = surfaceModeFromEvent(event);
-      if (!nextMode) return;
-      void switchSurfaceMode(nextMode);
-    }
-
-    window.addEventListener(NOTE_SURFACE_MODE_EVENT, handleSurfaceModeRequest);
-    return () => {
-      window.removeEventListener(NOTE_SURFACE_MODE_EVENT, handleSurfaceModeRequest);
-    };
-  }, [switchSurfaceMode]);
-
-  useEffect(() => {
-    if (surfaceMode !== "tile") return;
-    void setCurrentWindowAlwaysOnTop(true).catch(() => undefined);
-  }, [surfaceMode]);
+  }, [noteActions, windowActions]);
 
   const handleSave = useCallback(async () => {
     try {
-      await saveNote();
+      await noteActions.saveNote();
     } catch (error) {
-      setStatus("saveFailed");
+      noteActions.setStatus("saveFailed");
       showToast(getErrorMessage(error));
     }
-  }, [saveNote]);
+  }, [noteActions]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -410,9 +161,9 @@ export function NotePad({
 
   const handleOpenNote = async (noteId: string) => {
     try {
-      const note = await getNote(noteId);
-      applyNote(note);
-      await switchSurfaceMode("pad");
+      await noteActions.openNote(noteId);
+      await windowActions.switchSurfaceMode("pad", noteId);
+      setMode("new");
     } catch (error) {
       showToast(getErrorMessage(error));
     }
@@ -420,23 +171,14 @@ export function NotePad({
 
   const handlePin = async () => {
     try {
-      if (shouldSaveBeforeSwitchingToTile(noteSurfaceAutoSave)) {
-        await saveNote();
+      if (shouldSaveBeforeSwitchingToTile(config.noteSurfaceAutoSave)) {
+        await noteActions.saveNote();
       }
-      await switchSurfaceMode("tile");
+      await windowActions.switchSurfaceMode("tile", tileNoteId);
     } catch (error) {
       showToast(getErrorMessage(error));
     }
   };
-
-  const handleClose = useCallback(() => {
-    setIsExiting(true);
-    const closeSurface = surfaceMode === "tile" ? closeCurrentWindow : recycleCurrentNotepad;
-    void closeSurface().catch((error) => {
-      setIsExiting(false);
-      showToast(getErrorMessage(error));
-    });
-  }, [surfaceMode]);
 
   const copyTileContent = useCallback(async () => {
     try {
@@ -444,12 +186,12 @@ export function NotePad({
       if (!clipboard?.writeText) {
         throw new Error(t("notepad.error.copyUnsupported", { defaultValue: "当前环境不支持复制" }));
       }
-      await clipboard.writeText(content);
-      setStatus("copied");
+      await clipboard.writeText(noteState.content);
+      noteActions.setStatus("copied");
     } catch (error) {
       showToast(getErrorMessage(error));
     }
-  }, [content, t]);
+  }, [noteActions, noteState.content, t]);
 
   useEffect(() => {
     function handleSurfaceActionRequest(event: Event) {
@@ -467,50 +209,67 @@ export function NotePad({
       }
 
       if (action === "close") {
-        void handleClose();
+        void windowActions.handleClose();
         return;
       }
 
-      void switchSurfaceMode("pad");
+      void windowActions.switchSurfaceMode("pad", tileNoteId);
     }
 
     window.addEventListener(NOTE_SURFACE_ACTION_EVENT, handleSurfaceActionRequest);
     return () => {
       window.removeEventListener(NOTE_SURFACE_ACTION_EVENT, handleSurfaceActionRequest);
     };
-  }, [copyTileContent, handleClose, handleSave, switchSurfaceMode]);
+  }, [copyTileContent, handleSave, tileNoteId, windowActions]);
 
   useEffect(() => {
-    if (!noteSurfaceAutoSave || mode !== "new" || status !== "dirty") {
+    if (!config.noteSurfaceAutoSave || mode !== "new" || noteState.status !== "dirty") {
       return undefined;
     }
-    if (!hasDraftContent()) return undefined;
+    if (!noteActions.hasDraftContent()) return undefined;
 
     const timer = window.setTimeout(() => {
       void handleSave();
     }, 900);
 
     return () => window.clearTimeout(timer);
-  }, [handleSave, hasDraftContent, mode, noteSurfaceAutoSave, status]);
+  }, [config.noteSurfaceAutoSave, handleSave, mode, noteActions, noteState.status]);
 
-  const handleDrag = (event: MouseEvent<HTMLElement>) => {
-    const target = event.target as HTMLElement;
-    if (target.closest("button,input,textarea")) return;
-    void startCurrentWindowDrag().catch(() => undefined);
-  };
+  const handleEditorTitleChange = useCallback((title: string) => {
+    noteActions.setTitle(title);
+    noteActions.setStatus("dirty");
+  }, [noteActions]);
 
-  const resetDraft = () => {
-    setEditingNoteId(null);
-    setTitle("");
-    setContent("");
-    setMode("new");
-    setStatus("empty");
-  };
+  const handleEditorContentChange = useCallback((content: string) => {
+    noteActions.setContent(content);
+    noteActions.setStatus("dirty");
+  }, [noteActions]);
 
-  const isTile = surfaceMode === "tile";
-  const tileTitle = title.trim();
+  const handleAiGenerateTitle = useCallback(async () => {
+    if (!noteState.content.trim() || isAiGenerating) return;
+    if (!config.aiProvider?.enabled || !config.aiProvider.apiEndpoint || !config.aiProvider.apiKey || !config.aiProvider.model) {
+      showToast(t("settings.ai.notConfigured", { defaultValue: "请先在设置中配置 AI 提供商" }));
+      return;
+    }
+    setIsAiGenerating(true);
+    try {
+      const newTitle = await generateTitle({
+        config: config.aiProvider,
+        content: noteState.content,
+      });
+      noteActions.setTitle(newTitle);
+      noteActions.setStatus("dirty");
+    } catch (error) {
+      showToast(getErrorMessage(error));
+    } finally {
+      setIsAiGenerating(false);
+    }
+  }, [config.aiProvider, isAiGenerating, noteActions, noteState.content, t]);
+
+  const isTile = windowState.surfaceMode === "tile";
+  const tileTitle = noteState.title.trim();
   const enterClass = hasEnteredOnce.current ? "" : "animate-window-enter";
-  const surfaceWrapperClassName = `w-full h-screen flex flex-col bg-transparent p-0 ${isExiting ? "animate-window-exit" : enterClass}`;
+  const surfaceWrapperClassName = `w-full h-screen flex flex-col bg-transparent p-0 ${windowState.isExiting ? "animate-window-exit" : enterClass}`;
   const padSurfaceClassName =
     "app-surface-frame relative noise-bg w-full h-full min-h-0 bg-cloud overflow-hidden flex flex-col flex-1 border border-paper-deep/70 shadow-[0_1px_10px_rgba(26,26,24,0.06)] transition-all duration-200 ease-out";
 
@@ -519,24 +278,24 @@ export function NotePad({
       {isTile ? (
         <Tile
           title={tileTitle || undefined}
-          content={content}
-          color={tileColor}
-          fontSize={surfaceFontSize}
-          renderMarkdown={tileRenderMarkdown}
+          content={noteState.content}
+          color={config.tileColor}
+          fontSize={config.surfaceFontSize}
+          renderMarkdown={config.tileRenderMarkdown}
           imageBaseDir={imageBaseDir ?? undefined}
           width="100%"
           className="h-full cursor-default"
-          data-surface-mode={surfaceMode}
+          data-surface-mode={windowState.surfaceMode}
           data-context-menu="tile"
           data-note-id={tileNoteId}
-          onMouseDown={handleDrag}
+          onMouseDown={windowActions.handleDrag}
         >
           <button
             type="button"
-            aria-label="取消钉屏"
-            title="取消钉屏"
+            aria-label={t("notepad.button.unpin", { defaultValue: "取消钉屏" })}
+            title={t("notepad.button.unpin", { defaultValue: "取消钉屏" })}
             onMouseDown={(event) => event.stopPropagation()}
-            onClick={() => void handleClose()}
+            onClick={() => void windowActions.handleClose()}
             className="absolute top-2 right-2 z-10 w-6 h-6 flex items-center justify-center rounded-full text-ink-ghost/70 hover:text-red-400 hover:bg-danger-bg/80 transition-colors cursor-pointer"
           >
             <svg
@@ -554,24 +313,24 @@ export function NotePad({
           <SurfaceResizeHandles />
         </Tile>
       ) : (
-        <div className={padSurfaceClassName} data-surface-mode={surfaceMode}>
+        <div className={padSurfaceClassName} data-surface-mode={windowState.surfaceMode}>
           <>
             <div
               className="flex items-center justify-between pl-2 pr-3 pt-2 pb-0 cursor-default"
-              onMouseDown={handleDrag}
+              onMouseDown={windowActions.handleDrag}
             >
               <div className="flex items-center gap-2">
-                <TrafficLights size={11} withTooltips={false} onClose={() => void handleClose()} />
+                <TrafficLights size={11} withTooltips={false} onClose={() => void windowActions.handleClose()} />
                 <div className="w-px h-4 bg-paper-deep/30 mx-0.5" />
                 <button
-                  onClick={resetDraft}
+                  onClick={noteActions.resetDraft}
                   className={`relative px-3.5 py-1.5 text-[13px] rounded-t-lg transition-all duration-200 cursor-pointer ${
                     mode === "new"
                       ? "text-bamboo font-medium"
                       : "text-ink-ghost hover:text-ink-faint"
                   }`}
                 >
-                  {editingNoteId ? tabLabels.edit : tabLabels.new}
+                  {noteState.editingNoteId ? tabLabels.edit : tabLabels.new}
                   {mode === "new" && (
                     <div className="absolute bottom-0 left-3 right-3 h-[2px] bg-bamboo rounded-full" />
                   )}
@@ -617,138 +376,39 @@ export function NotePad({
             <div className="mx-4 mt-1 h-px bg-paper-deep/50" />
 
             {mode === "new" ? (
-              <div
-                data-pad-editor-body="true"
-                className="px-4 pt-3 pb-2 flex flex-col flex-1 min-h-0"
-              >
-                <input
-                  ref={titleRef}
-                  type="text"
-                  value={title}
-                  onChange={(event) => {
-                    setTitle(event.target.value);
-                    setStatus("dirty");
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === "ArrowDown") {
-                      event.preventDefault();
-                      contentRef.current?.focus();
-                    }
-                  }}
-                  placeholder={t("notepad.placeholder.title", { defaultValue: "标题（可选）" })}
-                  className="w-full font-display font-medium text-ink placeholder:text-ink-ghost/60 mb-2 tracking-wide shrink-0"
-                  style={{ fontSize: `${surfaceFontSize}px` }}
-                />
-
-                <textarea
-                  ref={contentRef}
-                  data-tab-indent="true"
-                  value={content}
-                  onChange={(event) => {
-                    setContent(event.target.value);
-                    setStatus("dirty");
-                  }}
-                  onPaste={imagePasteHandler}
-                  onDrop={imageDropHandler}
-                  onDragOver={imageDragOverHandler}
-                  onKeyDown={(event) => {
-                    if (event.key === "ArrowUp") {
-                      const ta = contentRef.current;
-                      if (ta && ta.selectionStart === ta.selectionEnd) {
-                        const textBeforeCursor = content.slice(0, ta.selectionStart);
-                        if (!textBeforeCursor.includes("\n")) {
-                          event.preventDefault();
-                          titleRef.current?.focus();
-                        }
-                      }
-                    }
-                  }}
-                  placeholder={t("notepad.placeholder.content", { defaultValue: "写点什么……" })}
-                  className="w-full flex-1 min-h-0 pb-2 leading-relaxed text-ink-soft font-body placeholder:text-ink-ghost/50"
-                  style={{ fontSize: `${surfaceFontSize}px`, tabSize: `var(--tab-indent-size, 2)` }}
-                />
-
-                <div className="flex items-center justify-between mt-auto pt-2 border-t border-paper-deep/30 shrink-0">
-                  <span className="text-[11px] text-ink-ghost font-mono tabular-nums truncate max-w-[170px]">
-                    {`${countNoteChars(content)} ${t("common.wordCountUnit", { defaultValue: "字" })} · ${statusLabel[status]}`}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={resetDraft}
-                      className="px-4 py-1.5 text-[12px] text-ink-faint hover:text-ink-soft rounded-lg hover:bg-paper-warm transition-all duration-200 cursor-pointer"
-                    >
-                      {t("notepad.button.clear", { defaultValue: "清空" })}
-                    </button>
-                    <button
-                      onClick={() => void handleSave()}
-                      className="px-4 py-1.5 text-[12px] text-cloud bg-bamboo hover:bg-bamboo-light rounded-lg transition-all duration-200 font-medium cursor-pointer"
-                    >
-                      {t("common.save", { defaultValue: "保存" })}
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <NoteEditor
+                ref={contentRef}
+                title={noteState.title}
+                content={noteState.content}
+                status={noteState.status}
+                fontSize={config.surfaceFontSize}
+                statusLabel={statusLabel}
+                wordCountLabel={t("common.wordCountUnit", { defaultValue: "字" })}
+                titlePlaceholder={t("notepad.placeholder.title", { defaultValue: "标题（可选）" })}
+                contentPlaceholder={t("notepad.placeholder.content", { defaultValue: "写点什么……" })}
+                clearLabel={t("notepad.button.clear", { defaultValue: "清空" })}
+                saveLabel={t("common.save", { defaultValue: "保存" })}
+                aiGenerateTooltip={t("settings.ai.generateTitle", { defaultValue: "AI 生成标题" })}
+                showAiButton={config.aiProvider?.enabled === true}
+                isAiGenerating={isAiGenerating}
+                onTitleChange={handleEditorTitleChange}
+                onContentChange={handleEditorContentChange}
+                onSave={() => void handleSave()}
+                onReset={noteActions.resetDraft}
+                onAiGenerateTitle={() => void handleAiGenerateTitle()}
+                onPaste={imagePasteHandler}
+                onDrop={imageDropHandler}
+                onDragOver={imageDragOverHandler}
+              />
             ) : (
-              <div className="p-2 flex-1 min-h-0 overflow-y-auto">
-                <div className="space-y-0.5">
-                  {notes.map((note) => (
-                    <button
-                      key={note.id}
-                      onClick={() => void handleOpenNote(note.id)}
-                      onMouseEnter={() => setHoveredNote(note.id)}
-                      onMouseLeave={() => setHoveredNote(null)}
-                      className="w-full text-left px-3.5 py-3 rounded-xl transition-all duration-200 cursor-pointer group hover:bg-paper-warm/70"
-                    >
-                      <div className="flex items-center justify-between mb-0.5">
-                        <span className="text-[13px] font-display font-medium text-ink-soft group-hover:text-ink transition-colors truncate pr-2">
-                          {getDisplayTitle(note)}
-                        </span>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void openNoteInEditor(note.id);
-                            }}
-                            className="w-6 h-6 flex items-center justify-center rounded-md text-ink-ghost hover:text-bamboo hover:bg-bamboo-mist/50 transition-all duration-200 opacity-0 group-hover:opacity-100 cursor-pointer"
-                            title={t("notepad.tooltip.openInEditor", {
-                              defaultValue: "在编辑器中打开",
-                            })}
-                          >
-                            <svg
-                              width="13"
-                              height="13"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                              <polyline points="15 3 21 3 21 9" />
-                              <line x1="10" y1="14" x2="21" y2="3" />
-                            </svg>
-                          </button>
-                          <span className="text-[11px] text-ink-ghost font-mono tabular-nums">
-                            {formatShortDate(note.updatedAt)}
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-[12px] text-ink-ghost leading-relaxed line-clamp-1 group-hover:text-ink-faint transition-colors">
-                        {note.preview || t("common.blankNote", { defaultValue: "空白笔记" })}
-                      </p>
-                      {hoveredNote === note.id && (
-                        <div className="mt-1.5 h-px bg-bamboo/10 transition-all duration-300" />
-                      )}
-                    </button>
-                  ))}
-                  {notes.length === 0 && (
-                    <div className="px-4 py-8 text-center text-[12px] text-ink-ghost">
-                      {t("notepad.emptyState", { defaultValue: "还没有可打开的笔记" })}
-                    </div>
-                  )}
-                </div>
-              </div>
+              <NoteList
+                notes={noteState.notes}
+                t={t}
+                emptyStateText={t("notepad.emptyState", { defaultValue: "还没有可打开的笔记" })}
+                openInEditorTooltip={t("notepad.tooltip.openInEditor", { defaultValue: "在编辑器中打开" })}
+                blankNoteText={t("common.blankNote", { defaultValue: "空白笔记" })}
+                onOpenNote={handleOpenNote}
+              />
             )}
           </>
           <SurfaceResizeHandles />

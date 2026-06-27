@@ -5,6 +5,18 @@ export type ThemeOption = "light" | "dark" | "system";
 export type TileColorMode = "system" | "custom";
 export type BackgroundFit = "cover" | "contain" | "repeat";
 
+export type ApiFormat = "openai" | "anthropic";
+
+export interface AiProviderConfig {
+  enabled: boolean;
+  providerId?: string;
+  apiEndpoint: string;
+  apiKey: string;
+  model: string;
+  apiFormat?: ApiFormat;
+  titlePrompt: string;
+}
+
 export interface AppConfig {
   locale: string;
   notesDir: string;
@@ -37,4 +49,5 @@ export interface AppConfig {
   backgroundScale?: number;
   backgroundPositionX?: number;
   backgroundPositionY?: number;
+  aiProvider?: AiProviderConfig;
 }

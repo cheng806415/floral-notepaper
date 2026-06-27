@@ -3,12 +3,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { checkGlobalShortcut, chooseBackgroundImage } from "../features/settings/api";
 import type {
+  AiProviderConfig,
   AppConfig,
   BackgroundFit,
   ThemeOption,
   TileColorMode,
   ViewMode,
 } from "../features/settings/types";
+import { getDefaultTitlePrompt } from "../features/ai/api";
+import { AI_PROVIDER_PRESETS, applyProviderPreset } from "../features/ai/providers";
+import type { ApiFormat } from "../features/ai/providers";
 import {
   formatHeldKeys,
   hotkeyToConfigString,
@@ -34,6 +38,21 @@ export function SettingsPanel({ config, onChange, onChooseNotesDir, onClose }: S
   const { t } = useTranslation();
   const setConfigValue = <Key extends keyof AppConfig>(key: Key, value: AppConfig[Key]) => {
     onChange({ ...config, [key]: value });
+  };
+  const setAiConfigValue = <Key extends keyof AiProviderConfig>(
+    key: Key,
+    value: AiProviderConfig[Key],
+  ) => {
+    const current = config.aiProvider ?? {
+      enabled: false,
+      providerId: "",
+      apiEndpoint: "",
+      apiKey: "",
+      model: "",
+      apiFormat: "openai" as ApiFormat,
+      titlePrompt: getDefaultTitlePrompt(),
+    };
+    onChange({ ...config, aiProvider: { ...current, [key]: value } });
   };
   const tileColorModes = useMemo<Array<{ value: TileColorMode; label: string }>>(
     () => [
@@ -444,6 +463,200 @@ export function SettingsPanel({ config, onChange, onChooseNotesDir, onClose }: S
             value={config.defaultViewMode}
             onChange={(v) => setConfigValue("defaultViewMode", v)}
           />
+        </section>
+
+        <section className="space-y-2 pt-2 border-t border-paper-deep/25">
+          <label className="flex items-center justify-between h-9 rounded-lg px-2.5 bg-paper-warm/45 border border-paper-deep/25 cursor-pointer">
+            <span className="text-[12px] text-ink-soft">
+              {t("settings.ai.title", { defaultValue: "AI 标题生成" })}
+            </span>
+            <input
+              type="checkbox"
+              checked={config.aiProvider?.enabled ?? false}
+              onChange={(event) => {
+                const enabled = event.target.checked;
+                const current = config.aiProvider;
+                if (enabled) {
+                  const aiConfig: AiProviderConfig = {
+                    enabled: true,
+                    providerId: current?.providerId ?? "",
+                    apiEndpoint: current?.apiEndpoint ?? "https://api.openai.com/v1",
+                    apiKey: current?.apiKey ?? "",
+                    model: current?.model ?? "gpt-4o-mini",
+                    apiFormat: current?.apiFormat ?? "openai",
+                    titlePrompt: current?.titlePrompt || getDefaultTitlePrompt(),
+                  };
+                  onChange({ ...config, aiProvider: aiConfig });
+                } else {
+                  if (current) {
+                    onChange({ ...config, aiProvider: { ...current, enabled: false } });
+                  } else {
+                    onChange({
+                      ...config,
+                      aiProvider: {
+                        enabled: false,
+                        providerId: "",
+                        apiEndpoint: "https://api.openai.com/v1",
+                        apiKey: "",
+                        model: "gpt-4o-mini",
+                        apiFormat: "openai",
+                        titlePrompt: getDefaultTitlePrompt(),
+                      },
+                    });
+                  }
+                }
+              }}
+              className="sr-only"
+            />
+            <div
+              className={`relative w-8 h-[18px] rounded-full transition-colors duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                config.aiProvider?.enabled ? "bg-bamboo" : "bg-paper-deep/50"
+              }`}
+            >
+              <div
+                className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.15)] transition-transform duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                  config.aiProvider?.enabled ? "translate-x-[14px]" : "translate-x-0"
+                }`}
+              />
+            </div>
+          </label>
+
+          {config.aiProvider?.enabled && (
+            <div className="space-y-2 pl-1">
+              <p className="text-[10px] text-ink-ghost leading-relaxed">
+                {t("settings.ai.description", {
+                  defaultValue: "选择 AI 提供商，自动为笔记生成标题。支持 OpenAI Chat Completions 和 Anthropic Messages 格式。",
+                })}
+              </p>
+
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-body text-ink-faint/70 px-0.5">
+                  {t("settings.ai.provider", { defaultValue: "提供商" })}
+                </label>
+                <select
+                  value={config.aiProvider?.providerId ?? ""}
+                  onChange={(event) => {
+                    const presetId = event.target.value;
+                    const preset = AI_PROVIDER_PRESETS.find((p) => p.id === presetId);
+                    if (preset) {
+                      const applied = applyProviderPreset(preset, config.aiProvider);
+                      onChange({
+                        ...config,
+                        aiProvider: {
+                          ...config.aiProvider!,
+                          providerId: preset.id,
+                          ...applied,
+                        },
+                      });
+                    } else {
+                      setAiConfigValue("providerId", "");
+                    }
+                  }}
+                  className="w-full h-8 px-2 rounded-lg bg-paper-warm/70 border border-paper-deep/40 text-[11px] font-mono text-ink-soft outline-none focus:border-bamboo/50 cursor-pointer appearance-none"
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23999' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E")`,
+                    backgroundRepeat: "no-repeat",
+                    backgroundPosition: "right 8px center",
+                    paddingRight: "28px",
+                  }}
+                >
+                  <option value="">
+                    {t("settings.ai.customProvider", { defaultValue: "自定义" })}
+                  </option>
+                  {AI_PROVIDER_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-body text-ink-faint/70 px-0.5">
+                  {t("settings.ai.apiFormat", { defaultValue: "API 格式" })}
+                </label>
+                <select
+                  value={config.aiProvider?.apiFormat ?? "openai"}
+                  onChange={(event) =>
+                    setAiConfigValue("apiFormat", event.target.value as ApiFormat)
+                  }
+                  className="w-full h-8 px-2 rounded-lg bg-paper-warm/70 border border-paper-deep/40 text-[11px] font-mono text-ink-soft outline-none focus:border-bamboo/50 cursor-pointer appearance-none"
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23999' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E")`,
+                    backgroundRepeat: "no-repeat",
+                    backgroundPosition: "right 8px center",
+                    paddingRight: "28px",
+                  }}
+                >
+                  <option value="openai">
+                    {t("settings.ai.formatOpenAi", { defaultValue: "OpenAI Chat Completions 格式" })}
+                  </option>
+                  <option value="anthropic">
+                    {t("settings.ai.formatAnthropic", { defaultValue: "Anthropic Messages 格式" })}
+                  </option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-body text-ink-faint/70 px-0.5">
+                  {t("settings.ai.apiEndpoint", { defaultValue: "API 地址" })}
+                </label>
+                <input
+                  type="text"
+                  value={config.aiProvider?.apiEndpoint ?? ""}
+                  onChange={(event) => setAiConfigValue("apiEndpoint", event.target.value)}
+                  placeholder="https://api.openai.com/v1"
+                  spellCheck={false}
+                  className="w-full h-8 px-2.5 rounded-lg bg-paper-warm/70 border border-paper-deep/40 text-[11px] font-mono text-ink-soft outline-none focus:border-bamboo/50"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-body text-ink-faint/70 px-0.5">
+                  {t("settings.ai.apiKey", { defaultValue: "API 密钥" })}
+                </label>
+                <input
+                  type="password"
+                  value={config.aiProvider?.apiKey ?? ""}
+                  onChange={(event) => setAiConfigValue("apiKey", event.target.value)}
+                  placeholder="sk-..."
+                  spellCheck={false}
+                  className="w-full h-8 px-2.5 rounded-lg bg-paper-warm/70 border border-paper-deep/40 text-[11px] font-mono text-ink-soft outline-none focus:border-bamboo/50"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-body text-ink-faint/70 px-0.5">
+                  {t("settings.ai.model", { defaultValue: "模型名称" })}
+                </label>
+                <input
+                  type="text"
+                  value={config.aiProvider?.model ?? ""}
+                  onChange={(event) => setAiConfigValue("model", event.target.value)}
+                  placeholder="gpt-4o-mini"
+                  spellCheck={false}
+                  className="w-full h-8 px-2.5 rounded-lg bg-paper-warm/70 border border-paper-deep/40 text-[11px] font-mono text-ink-soft outline-none focus:border-bamboo/50"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-body text-ink-faint/70 px-0.5">
+                  {t("settings.ai.titlePrompt", { defaultValue: "标题提示词" })}
+                </label>
+                <textarea
+                  value={config.aiProvider?.titlePrompt ?? ""}
+                  onChange={(event) => setAiConfigValue("titlePrompt", event.target.value)}
+                  rows={2}
+                  spellCheck={false}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-paper-warm/70 border border-paper-deep/40 text-[11px] font-body text-ink-soft outline-none focus:border-bamboo/50 resize-none leading-relaxed"
+                />
+                <button
+                  type="button"
+                  onClick={() => setAiConfigValue("titlePrompt", getDefaultTitlePrompt())}
+                  className="h-7 px-2.5 rounded-lg border border-paper-deep/45 text-[11px] text-ink-faint hover:text-bamboo hover:bg-bamboo-mist/50 transition-colors cursor-pointer"
+                >
+                  {t("settings.ai.resetPrompt", { defaultValue: "重置为默认提示词" })}
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="pt-2 border-t border-paper-deep/25">
