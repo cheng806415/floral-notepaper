@@ -831,14 +831,16 @@ export function MainWindow({
 
   const handleAiGenerateTitle = useCallback(async () => {
     if (!content.trim() || isAiGenerating) return;
-    if (!settingsConfig?.aiProvider?.enabled || !settingsConfig.aiProvider.apiEndpoint || !settingsConfig.aiProvider.apiKey || !settingsConfig.aiProvider.model) {
-      showToast(t("settings.ai.notConfigured", { defaultValue: "请先在设置中配置 AI 提供商" }));
+    const ai = settingsConfig?.aiProvider;
+    const isMock = ai?.providerId === "mock" || ai?.apiEndpoint?.startsWith("mock://");
+    if (!ai?.enabled || !ai.apiEndpoint || !ai.model || (!isMock && !ai.apiKey)) {
+      showToast(t("settings.ai.notConfigured", { defaultValue: "请先在设置中配置 AI 模型" }));
       return;
     }
     setIsAiGenerating(true);
     try {
       const newTitle = await generateTitle({
-        config: settingsConfig.aiProvider,
+        config: ai,
         content,
       });
       setTitle(newTitle);

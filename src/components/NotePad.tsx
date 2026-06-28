@@ -18,6 +18,7 @@ import { Tile } from "./Tile";
 import { TrafficLights } from "./TrafficLights";
 import { SurfaceResizeHandles } from "./SurfaceResizeHandles";
 import { NoteEditor } from "./NoteEditor";
+import { NotePadErrorBoundary } from "./NotePadErrorBoundary";
 import { NoteList } from "./NoteList";
 import { useNoteEditor, type NotePadStatus } from "../hooks/useNoteEditor";
 import { useWindowManager } from "../hooks/useWindowManager";
@@ -247,14 +248,16 @@ export function NotePad({
 
   const handleAiGenerateTitle = useCallback(async () => {
     if (!noteState.content.trim() || isAiGenerating) return;
-    if (!config.aiProvider?.enabled || !config.aiProvider.apiEndpoint || !config.aiProvider.apiKey || !config.aiProvider.model) {
-      showToast(t("settings.ai.notConfigured", { defaultValue: "请先在设置中配置 AI 提供商" }));
+    const ai = config.aiProvider;
+    const isMock = ai?.providerId === "mock" || ai?.apiEndpoint?.startsWith("mock://");
+    if (!ai?.enabled || !ai.apiEndpoint || !ai.model || (!isMock && !ai.apiKey)) {
+      showToast(t("settings.ai.notConfigured", { defaultValue: "请先在设置中配置 AI 模型" }));
       return;
     }
     setIsAiGenerating(true);
     try {
       const newTitle = await generateTitle({
-        config: config.aiProvider,
+        config: ai,
         content: noteState.content,
       });
       noteActions.setTitle(newTitle);
@@ -375,41 +378,43 @@ export function NotePad({
 
             <div className="mx-4 mt-1 h-px bg-paper-deep/50" />
 
-            {mode === "new" ? (
-              <NoteEditor
-                ref={contentRef}
-                title={noteState.title}
-                content={noteState.content}
-                status={noteState.status}
-                fontSize={config.surfaceFontSize}
-                statusLabel={statusLabel}
-                wordCountLabel={t("common.wordCountUnit", { defaultValue: "字" })}
-                titlePlaceholder={t("notepad.placeholder.title", { defaultValue: "标题（可选）" })}
-                contentPlaceholder={t("notepad.placeholder.content", { defaultValue: "写点什么……" })}
-                clearLabel={t("notepad.button.clear", { defaultValue: "清空" })}
-                saveLabel={t("common.save", { defaultValue: "保存" })}
-                aiGenerateTooltip={t("settings.ai.generateTitle", { defaultValue: "AI 生成标题" })}
-                showAiButton={config.aiProvider?.enabled === true}
-                isAiGenerating={isAiGenerating}
-                onTitleChange={handleEditorTitleChange}
-                onContentChange={handleEditorContentChange}
-                onSave={() => void handleSave()}
-                onReset={noteActions.resetDraft}
-                onAiGenerateTitle={() => void handleAiGenerateTitle()}
-                onPaste={imagePasteHandler}
-                onDrop={imageDropHandler}
-                onDragOver={imageDragOverHandler}
-              />
-            ) : (
-              <NoteList
-                notes={noteState.notes}
-                t={t}
-                emptyStateText={t("notepad.emptyState", { defaultValue: "还没有可打开的笔记" })}
-                openInEditorTooltip={t("notepad.tooltip.openInEditor", { defaultValue: "在编辑器中打开" })}
-                blankNoteText={t("common.blankNote", { defaultValue: "空白笔记" })}
-                onOpenNote={handleOpenNote}
-              />
-            )}
+            <NotePadErrorBoundary>
+              {mode === "new" ? (
+                <NoteEditor
+                  ref={contentRef}
+                  title={noteState.title}
+                  content={noteState.content}
+                  status={noteState.status}
+                  fontSize={config.surfaceFontSize}
+                  statusLabel={statusLabel}
+                  wordCountLabel={t("common.wordCountUnit", { defaultValue: "字" })}
+                  titlePlaceholder={t("notepad.placeholder.title", { defaultValue: "标题（可选）" })}
+                  contentPlaceholder={t("notepad.placeholder.content", { defaultValue: "写点什么……" })}
+                  clearLabel={t("notepad.button.clear", { defaultValue: "清空" })}
+                  saveLabel={t("common.save", { defaultValue: "保存" })}
+                  aiGenerateTooltip={t("settings.ai.generateTitle", { defaultValue: "AI 生成标题" })}
+                  showAiButton={config.aiProvider?.enabled === true}
+                  isAiGenerating={isAiGenerating}
+                  onTitleChange={handleEditorTitleChange}
+                  onContentChange={handleEditorContentChange}
+                  onSave={() => void handleSave()}
+                  onReset={noteActions.resetDraft}
+                  onAiGenerateTitle={() => void handleAiGenerateTitle()}
+                  onPaste={imagePasteHandler}
+                  onDrop={imageDropHandler}
+                  onDragOver={imageDragOverHandler}
+                />
+              ) : (
+                <NoteList
+                  notes={noteState.notes}
+                  t={t}
+                  emptyStateText={t("notepad.emptyState", { defaultValue: "还没有可打开的笔记" })}
+                  openInEditorTooltip={t("notepad.tooltip.openInEditor", { defaultValue: "在编辑器中打开" })}
+                  blankNoteText={t("common.blankNote", { defaultValue: "空白笔记" })}
+                  onOpenNote={handleOpenNote}
+                />
+              )}
+            </NotePadErrorBoundary>
           </>
           <SurfaceResizeHandles />
         </div>

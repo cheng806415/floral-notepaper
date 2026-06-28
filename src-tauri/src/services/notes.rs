@@ -25,29 +25,46 @@ const MACOS_SHORTCUT_MIGRATION_MARKER: &str = ".macos-shortcut-default-v3";
 pub struct AiProviderConfig {
     #[serde(default)]
     pub enabled: bool,
+    #[serde(default = "default_ai_config_mode")]
+    pub config_mode: String,
     #[serde(default)]
     pub provider_id: String,
     #[serde(default)]
     pub api_endpoint: String,
     #[serde(default)]
+    pub full_url: bool,
+    #[serde(default)]
     pub api_key: String,
     #[serde(default)]
     pub model: String,
-    #[serde(default)]
+    #[serde(default = "default_ai_api_format")]
     pub api_format: String,
+    #[serde(default)]
+    pub multimodal: bool,
     #[serde(default = "default_ai_title_prompt")]
     pub title_prompt: String,
+}
+
+fn default_ai_config_mode() -> String {
+    "preset".to_string()
+}
+
+fn default_ai_api_format() -> String {
+    "openai".to_string()
 }
 
 impl Default for AiProviderConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            config_mode: default_ai_config_mode(),
             provider_id: String::new(),
             api_endpoint: String::new(),
+            full_url: false,
             api_key: String::new(),
             model: String::new(),
-            api_format: String::new(),
+            api_format: default_ai_api_format(),
+            multimodal: false,
             title_prompt: default_ai_title_prompt(),
         }
     }

@@ -301,6 +301,30 @@ fn take_startup_file() -> Option<String> {
     desktop::take_startup_file()
 }
 
+/// 前端错误边界通过此命令将错误信息写入日志文件，方便调试。
+#[tauri::command]
+fn log_frontend_error(message: String, stack: Option<String>) {
+    let mut log_path = std::env::temp_dir();
+    log_path.push("floral-notepaper-frontend-errors.log");
+    let ts = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+    let mut content = format!("\n=== [{ts}] ===\n{message}\n");
+    if let Some(s) = &stack {
+        content.push_str("Component Stack:\n");
+        for line in s.lines() {
+            content.push_str(&format!("  {line}\n"));
+        }
+    }
+    // 同时输出到 stderr（如果终端还连着的话）
+    eprintln!("{content}");
+    // 确保 stderr 立即刷新到终端
+    use std::io::Write;
+    let _ = std::io::stderr().flush();
+    // 追加写入日志文件
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&log_path) {
+        let _ = writeln!(file, "{content}");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -314,6 +338,7 @@ pub fn run() {
             let _ = desktop::show_main_window(app);
         }))
         .setup(|app| {
+            eprintln!("[floral-notepaper] 应用启动，stderr 日志已就绪");
             if let Ok(store) = default_store() {
                 let base = store.base_dir();
                 let scope = app.asset_protocol_scope();
@@ -351,6 +376,7 @@ pub fn run() {
             start_shortcut_recording,
             stop_shortcut_recording,
             open_notepad_window,
+            log_frontend_error,
             recycle_notepad_window,
             open_tile_window,
             toggle_tile_window,

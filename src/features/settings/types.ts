@@ -5,15 +5,19 @@ export type ThemeOption = "light" | "dark" | "system";
 export type TileColorMode = "system" | "custom";
 export type BackgroundFit = "cover" | "contain" | "repeat";
 
+export type AiConfigMode = "preset" | "custom";
 export type ApiFormat = "openai" | "anthropic";
 
 export interface AiProviderConfig {
   enabled: boolean;
-  providerId?: string;
+  configMode: AiConfigMode;
+  providerId: string;
   apiEndpoint: string;
+  fullUrl: boolean;
   apiKey: string;
   model: string;
-  apiFormat?: ApiFormat;
+  apiFormat: ApiFormat;
+  multimodal: boolean;
   titlePrompt: string;
 }
 

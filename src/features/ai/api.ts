@@ -1,5 +1,4 @@
 import type { AiProviderConfig } from "../settings/types";
-import type { ApiFormat } from "./providers";
 
 const DEFAULT_TITLE_PROMPT =
   "请为以下笔记内容生成一个简洁、准确的标题，不超过20个字，不要加引号，不要加任何前缀或解释：";
@@ -46,6 +45,7 @@ interface AnthropicRequest {
   model: string;
   messages: AnthropicMessage[];
   max_tokens: number;
+  system?: string;
   temperature?: number;
   stream?: boolean;
 }
@@ -62,6 +62,7 @@ interface AnthropicResponse {
 function normalizeEndpoint(endpoint: string): string {
   let url = endpoint.trim();
   if (!url) return "";
+  if (url.startsWith("mock://")) return url;
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
     url = "https://" + url;
   }
@@ -71,35 +72,37 @@ function normalizeEndpoint(endpoint: string): string {
   return url;
 }
 
-function resolveApiFormat(config: AiProviderConfig): ApiFormat {
-  if (config.apiFormat === "anthropic") return "anthropic";
-  return "openai";
+function buildRequestUrl(config: AiProviderConfig): string {
+  const base = normalizeEndpoint(config.apiEndpoint);
+  if (config.fullUrl) {
+    return base;
+  }
+  if (config.apiFormat === "anthropic") {
+    return `${base}/v1/messages`;
+  }
+  return `${base}/chat/completions`;
 }
 
 // ── OpenAI Chat Completions call ──
 
-function buildOpenAiUrl(baseUrl: string): string {
-  if (baseUrl.endsWith("/chat/completions")) {
-    return baseUrl;
-  }
-  return `${baseUrl}/chat/completions`;
-}
-
 async function callOpenAi(
-  endpoint: string,
+  url: string,
   apiKey: string,
   model: string,
+  systemPrompt: string,
   userContent: string,
 ): Promise<string> {
   const body: OpenAiRequest = {
     model,
-    messages: [{ role: "user", content: userContent }],
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userContent },
+    ],
     temperature: 0.3,
     max_tokens: 64,
     stream: false,
   };
 
-  const url = buildOpenAiUrl(endpoint);
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -128,28 +131,22 @@ async function callOpenAi(
 
 // ── Anthropic Messages call ──
 
-function buildAnthropicUrl(baseUrl: string): string {
-  if (baseUrl.endsWith("/messages")) {
-    return baseUrl;
-  }
-  return `${baseUrl}/messages`;
-}
-
 async function callAnthropic(
-  endpoint: string,
+  url: string,
   apiKey: string,
   model: string,
+  systemPrompt: string,
   userContent: string,
 ): Promise<string> {
   const body: AnthropicRequest = {
     model,
+    system: systemPrompt,
     messages: [{ role: "user", content: userContent }],
     max_tokens: 64,
     temperature: 0.3,
     stream: false,
   };
 
-  const url = buildAnthropicUrl(endpoint);
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -196,13 +193,11 @@ function generateMockTitle(content: string): string {
   const trimmed = content.trim();
   if (!trimmed) return "无标题";
 
-  // 取第一行尝试提取有意义的标题
   const firstLine = trimmed.split(/\n/)[0].replace(/^[#\-*\s]+/, "").trim();
   if (firstLine.length >= 2 && firstLine.length <= 30) {
     return firstLine;
   }
 
-  // 根据内容长度返回不同的 mock 标题
   const idx = trimmed.length % MOCK_TITLES.length;
   const suffix = trimmed.length > 100 ? ` (${trimmed.length}字)` : "";
   return MOCK_TITLES[idx] + suffix;
@@ -228,8 +223,7 @@ export async function generateTitle({
     throw new Error("Note content is empty");
   }
 
-  // ── Mock 模式：本地测试，不发起网络请求 ──
-  if (config.providerId === "mock") {
+  if (config.providerId === "mock" || config.apiEndpoint.startsWith("mock://")) {
     await delay(400 + Math.random() * 300);
     return generateMockTitle(trimmedContent);
   }
@@ -246,15 +240,14 @@ export async function generateTitle({
   }
 
   const prompt = config.titlePrompt?.trim() || DEFAULT_TITLE_PROMPT;
-  const userContent = `${prompt}\n\n${trimmedContent.slice(0, 3000)}`;
-
-  const apiFormat = resolveApiFormat(config);
+  const userContent = trimmedContent.slice(0, 3000);
+  const url = buildRequestUrl(config);
 
   let title: string;
-  if (apiFormat === "anthropic") {
-    title = await callAnthropic(endpoint, config.apiKey.trim(), config.model.trim(), userContent);
+  if (config.apiFormat === "anthropic") {
+    title = await callAnthropic(url, config.apiKey.trim(), config.model.trim(), prompt, userContent);
   } else {
-    title = await callOpenAi(endpoint, config.apiKey.trim(), config.model.trim(), userContent);
+    title = await callOpenAi(url, config.apiKey.trim(), config.model.trim(), prompt, userContent);
   }
 
   if (!title) {
@@ -267,6 +260,7 @@ export async function generateTitle({
 export function isAiConfigured(config: AiProviderConfig | undefined): boolean {
   if (!config) return false;
   if (!config.enabled) return false;
+  if (config.providerId === "mock") return true;
   return Boolean(
     config.apiEndpoint?.trim() && config.apiKey?.trim() && config.model?.trim(),
   );
